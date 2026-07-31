@@ -1,0 +1,35 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# local environment files
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+
+# local Codex work and deliverables (not part of the app repository)
+/work/
+/outputs/
+
+# test artifacts
+/test-results/
+/playwright-report/
