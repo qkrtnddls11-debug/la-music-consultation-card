@@ -1,5 +1,5 @@
-import { ConsultationWizard } from "@/components/consultation-wizard";
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
-  return <ConsultationWizard />;
+  redirect("/admin");
 }

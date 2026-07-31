@@ -185,7 +185,6 @@ export function AdminDashboard() {
               {loginBusy ? "확인 중…" : "관리자 화면 열기"}
             </button>
           </form>
-          <Link href="/" className="mt-5 flex min-h-12 items-center justify-center text-sm font-semibold text-[#6b6459] underline decoration-[#c9c2b7] underline-offset-4">학생 상담 카드로 돌아가기</Link>
         </section>
       </main>
     );
@@ -197,7 +196,7 @@ export function AdminDashboard() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
           <div><h1 className="text-lg font-extrabold">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">최근 상담 {records.length}건</p></div>
           <div className="flex gap-2">
-            <Link href="/" className="flex min-h-12 items-center rounded-xl bg-[#4a453d] px-3.5 text-sm font-bold">학생 화면</Link>
+            <Link href="/consult" className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link>
             <button type="button" onClick={logout} className="min-h-12 rounded-xl border border-[#6b6459] px-3.5 text-sm font-bold">로그아웃</button>
           </div>
         </div>
