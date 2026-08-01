@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  COMMON_INSTRUMENT_DIFFICULTIES,
   DAYS,
   EMPTY_CONSULTATION,
   GUITAR_DETAILS,
@@ -23,6 +24,7 @@ type StepId =
   | "phones"
   | "subjects"
   | "vocal"
+  | "instrument-difficulties"
   | "instrument"
   | "purpose"
   | "ipsi-info"
@@ -47,6 +49,7 @@ const STEP_LABELS: Record<StepId, string> = {
   phones: "연락처",
   subjects: "관심 과목",
   vocal: "보컬",
+  "instrument-difficulties": "악기 고민",
   instrument: "악기 소지",
   purpose: "레슨 목적",
   "ipsi-info": "입시 · 학교 정보",
@@ -63,7 +66,18 @@ const STEP_LABELS: Record<StepId, string> = {
 };
 
 const INSTRUMENTS = ["기타", "피아노", "트럼펫", "플루트", "미디"];
+const DIFFICULTY_INSTRUMENTS = ["기타", "피아노", "트럼펫", "플루트"] as const;
+const SUBJECT_INSTRUMENT_DIFFICULTIES: Record<(typeof DIFFICULTY_INSTRUMENTS)[number], readonly string[]> = {
+  기타: ["코드·화성", "손가락·운지", "소리·톤"],
+  피아노: ["코드·화성", "손가락·운지", "양손 밸런스"],
+  트럼펫: ["호흡·롱톤", "고음·저음", "텅잉·아티큘레이션", "소리·톤"],
+  플루트: ["호흡·롱톤", "고음·저음", "텅잉·아티큘레이션", "소리·톤"],
+};
 const EMPTY_DETAILS: SubjectDetails = { 기타: [], 피아노: [], 트럼펫: [], 플루트: [] };
+
+function isDifficultyInstrument(subject: string): subject is (typeof DIFFICULTY_INSTRUMENTS)[number] {
+  return DIFFICULTY_INSTRUMENTS.some((instrument) => instrument === subject);
+}
 
 function createEmptyDraft(submissionSource: SubmissionSource): ConsultationInput {
   return {
@@ -71,6 +85,7 @@ function createEmptyDraft(submissionSource: SubmissionSource): ConsultationInput
     submission_source: submissionSource,
     subjects: [],
     vocal_difficulties: [],
+    instrument_difficulties: [],
     lesson_experience: { hasExperience: null, subjects: "", period: "" },
     schedule_preferences: [
       { rank: 1, days: [], timeSlot: "" },
@@ -83,6 +98,9 @@ function createEmptyDraft(submissionSource: SubmissionSource): ConsultationInput
 function buildFlow(draft: ConsultationInput): StepId[] {
   const steps: StepId[] = ["name", "birth", "gender", "phones", "subjects"];
   if (draft.subjects.includes("보컬")) steps.push("vocal");
+  if (draft.subjects.some(isDifficultyInstrument)) {
+    steps.push("instrument-difficulties");
+  }
   if (draft.subjects.some((subject) => INSTRUMENTS.includes(subject))) steps.push("instrument");
   steps.push("purpose");
 
@@ -110,6 +128,16 @@ function validPhone(value: string) {
 
 function toggleValue(values: string[], value: string) {
   return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
+
+function instrumentDifficultyOptions(subjects: string[]) {
+  if (!subjects.some(isDifficultyInstrument)) return [];
+  const options = new Set<string>(COMMON_INSTRUMENT_DIFFICULTIES);
+  for (const subject of DIFFICULTY_INSTRUMENTS) {
+    if (!subjects.includes(subject)) continue;
+    for (const option of SUBJECT_INSTRUMENT_DIFFICULTIES[subject]) options.add(option);
+  }
+  return [...options];
 }
 
 function birthDate(year: string, month: string, day: string) {
@@ -337,11 +365,18 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
 
   function selectSubject(subject: string) {
     const selected = draft.subjects.includes(subject);
-    patchDraft("subjects", toggleValue(draft.subjects, subject));
+    const subjects = toggleValue(draft.subjects, subject);
+    const allowedInstrumentDifficulties = instrumentDifficultyOptions(subjects);
+    setDraft((previous) => ({
+      ...previous,
+      subjects,
+      vocal_difficulties: subjects.includes("보컬") ? previous.vocal_difficulties : [],
+      instrument_difficulties: previous.instrument_difficulties.filter((item) => allowedInstrumentDifficulties.includes(item)),
+      has_instrument: subjects.some((item) => INSTRUMENTS.includes(item)) ? previous.has_instrument : "",
+    }));
     if (selected && subject in details) {
       setDetails((previous) => ({ ...previous, [subject]: [] }));
     }
-    if (selected && subject === "보컬") patchDraft("vocal_difficulties", []);
   }
 
   function updateSchedule(rank: 1 | 2 | 3, patch: Partial<SchedulePreference>) {
@@ -512,6 +547,28 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
             <ChipWrap>{VOCAL_DIFFICULTIES.map((item) => <Chip key={item} selected={draft.vocal_difficulties.includes(item)} onClick={() => patchDraft("vocal_difficulties", toggleValue(draft.vocal_difficulties, item))}>{item}</Chip>)}</ChipWrap>
           </>
         );
+      case "instrument-difficulties": {
+        const selectedInstruments = draft.subjects.filter(isDifficultyInstrument);
+        return (
+          <>
+            <QuestionHeading
+              title={<>{selectedInstruments.join("·")}에서 가장 어렵거나<br />도움받고 싶은 부분은?</>}
+              sub="여러 개 선택할 수 있어요"
+            />
+            <ChipWrap>
+              {instrumentDifficultyOptions(draft.subjects).map((item) => (
+                <Chip
+                  key={item}
+                  selected={draft.instrument_difficulties.includes(item)}
+                  onClick={() => patchDraft("instrument_difficulties", toggleValue(draft.instrument_difficulties, item))}
+                >
+                  {item}
+                </Chip>
+              ))}
+            </ChipWrap>
+          </>
+        );
+      }
       case "instrument":
         return (
           <>
@@ -666,6 +723,7 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
       ["학부모 연락처", draft.parent_phone],
       ["관심 과목", detailSubjects(draft.subjects, details).join(", ")],
       ["보컬 고민", draft.vocal_difficulties.join(", ")],
+      ["악기 고민", draft.instrument_difficulties.join(", ")],
       ["악기 소지", draft.has_instrument],
       ["레슨 목적", draft.purpose],
     ];

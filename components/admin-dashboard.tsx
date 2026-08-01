@@ -430,6 +430,7 @@ function ConsultationDetail({
     ["학부모 연락처", record.parent_phone],
     ["관심 과목", record.subjects.join(", ")],
     ["보컬 고민", record.vocal_difficulties.join(", ")],
+    ["악기 고민", record.instrument_difficulties.join(", ")],
     ["악기 소지", record.has_instrument],
     ["레슨 목적", record.purpose],
   ];

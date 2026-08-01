@@ -17,6 +17,7 @@ create table public.consultations (
   parent_phone text not null default '',
   subjects text[] not null default '{}',
   vocal_difficulties text[] not null default '{}',
+  instrument_difficulties text[] not null default '{}',
   has_instrument text not null default '',
   purpose text not null,
 
@@ -60,7 +61,7 @@ grant usage on type public.consultation_card_type to anon;
 grant usage on type public.consultation_status to anon;
 grant insert (
   card_type, submission_source, name, birth_date, student_phone, parent_phone, subjects,
-  vocal_difficulties, has_instrument, purpose, school, school_status,
+  vocal_difficulties, instrument_difficulties, has_instrument, purpose, school, school_status,
   region, gender, ipsi_type, ipsi_period, target_school, consult_content,
   genre_song, question, lesson_experience, referral_source, referral_name,
   schedule_preferences, start_available, etc_memo

@@ -19,6 +19,7 @@ export const GUITAR_DETAILS = [
 
 export const STYLE_DETAILS = ["클래식", "재즈"] as const;
 export const VOCAL_DIFFICULTIES = ["음정", "박자", "테크닉", "감정표현", "발성", "호흡"] as const;
+export const COMMON_INSTRUMENT_DIFFICULTIES = ["기초 자세", "리듬·박자", "악보 읽기", "테크닉·속도", "곡 완성·표현"] as const;
 export const PURPOSE_OPTIONS = ["프로·입시", "오디션", "개인앨범·유튜브 준비", "여가·자기계발"] as const;
 export const REFERRAL_OPTIONS = [
   "네이버 플레이스(지도)",
@@ -59,6 +60,7 @@ export type ConsultationInput = {
   parent_phone: string;
   subjects: string[];
   vocal_difficulties: string[];
+  instrument_difficulties: string[];
   has_instrument: string;
   purpose: string;
   school: string;
@@ -129,6 +131,7 @@ export const EMPTY_CONSULTATION: ConsultationInput = {
   parent_phone: "",
   subjects: [],
   vocal_difficulties: [],
+  instrument_difficulties: [],
   has_instrument: "",
   purpose: "",
   school: "",

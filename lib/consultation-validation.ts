@@ -84,6 +84,7 @@ export function normalizeConsultation(
     parent_phone: clean(source.parent_phone, 20),
     subjects,
     vocal_difficulties: cleanArray(source.vocal_difficulties, 20),
+    instrument_difficulties: cleanArray(source.instrument_difficulties, 20),
     has_instrument: clean(source.has_instrument),
     purpose,
     school: cardType === "입시" ? clean(source.school) : "",
