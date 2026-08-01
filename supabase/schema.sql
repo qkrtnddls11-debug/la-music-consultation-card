@@ -10,6 +10,7 @@ create table public.consultations (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   card_type public.consultation_card_type not null,
+  submission_source text not null default 'tablet' check (submission_source in ('tablet', 'link')),
   name text not null check (char_length(name) between 1 and 80),
   birth_date date,
   student_phone text not null default '',
@@ -58,7 +59,7 @@ revoke all on table public.consultations from anon, authenticated;
 grant usage on type public.consultation_card_type to anon;
 grant usage on type public.consultation_status to anon;
 grant insert (
-  card_type, name, birth_date, student_phone, parent_phone, subjects,
+  card_type, submission_source, name, birth_date, student_phone, parent_phone, subjects,
   vocal_difficulties, has_instrument, purpose, school, school_status,
   region, gender, ipsi_type, ipsi_period, target_school, consult_content,
   genre_song, question, lesson_experience, referral_source, referral_name,
@@ -75,4 +76,4 @@ with check (status = '상담');
 grant all on table public.consultations to service_role;
 
 comment on table public.consultations is
-  '라 실용음악학원 태블릿 상담 카드 — 기존 CRM과 완전히 분리된 데이터';
+  '라 실용음악학원 상담 카드 — 기존 CRM과 완전히 분리된 데이터';

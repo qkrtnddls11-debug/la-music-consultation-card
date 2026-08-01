@@ -34,6 +34,7 @@ export const TIME_SLOTS = ["오전 11~1시", "오후 1~4시", "오후 4~7시", "
 
 export type CardType = "일반" | "입시";
 export type ConsultationStatus = "상담" | "등록";
+export type SubmissionSource = "tablet" | "link";
 
 export type LessonExperience = {
   hasExperience: boolean | null;
@@ -49,6 +50,7 @@ export type SchedulePreference = {
 
 export type ConsultationInput = {
   card_type: CardType;
+  submission_source: SubmissionSource;
   name: string;
   birth_date: string | null;
   student_phone: string;
@@ -89,6 +91,7 @@ export const EMPTY_SCHEDULE: SchedulePreference[] = [
 
 export const EMPTY_CONSULTATION: ConsultationInput = {
   card_type: "일반",
+  submission_source: "tablet",
   name: "",
   birth_date: null,
   student_phone: "",

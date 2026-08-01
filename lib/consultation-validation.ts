@@ -65,16 +65,19 @@ export function normalizeConsultation(
   const name = clean(source.name, 80);
   const subjects = cleanArray(source.subjects, 20);
   const birthDate = clean(source.birth_date, 10);
+  const gender = clean(source.gender, 4);
 
   if (!name) return { error: "이름을 입력해 주세요." };
   if (!purpose) return { error: "레슨 목적을 선택해 주세요." };
   if (subjects.length === 0) return { error: "관심 과목을 하나 이상 선택해 주세요." };
+  if (gender !== "남" && gender !== "여") return { error: "성별을 선택해 주세요." };
   if (birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
     return { error: "생년월일 형식이 올바르지 않습니다." };
   }
 
   const data: ConsultationInput = {
     card_type: cardType,
+    submission_source: source.submission_source === "link" ? "link" : "tablet",
     name,
     birth_date: birthDate || null,
     student_phone: clean(source.student_phone, 20),
@@ -86,7 +89,7 @@ export function normalizeConsultation(
     school: cardType === "입시" ? clean(source.school) : "",
     school_status: cardType === "입시" ? clean(source.school_status) : "",
     region: cardType === "입시" ? clean(source.region) : "",
-    gender: cardType === "입시" ? clean(source.gender) : "",
+    gender,
     ipsi_type: cardType === "입시" ? clean(source.ipsi_type) : "",
     ipsi_period: cardType === "입시" ? clean(source.ipsi_period) : "",
     target_school: cardType === "입시" ? clean(source.target_school) : "",

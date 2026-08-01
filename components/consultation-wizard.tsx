@@ -13,11 +13,13 @@ import {
   VOCAL_DIFFICULTIES,
   type ConsultationInput,
   type SchedulePreference,
+  type SubmissionSource,
 } from "@/lib/types";
 
 type StepId =
   | "name"
   | "birth"
+  | "gender"
   | "phones"
   | "subjects"
   | "vocal"
@@ -41,6 +43,7 @@ type SubjectDetails = Record<SubjectDetailKey, string[]>;
 const STEP_LABELS: Record<StepId, string> = {
   name: "이름",
   birth: "생년월일",
+  gender: "성별",
   phones: "연락처",
   subjects: "관심 과목",
   vocal: "보컬",
@@ -62,9 +65,10 @@ const STEP_LABELS: Record<StepId, string> = {
 const INSTRUMENTS = ["기타", "피아노", "트럼펫", "플루트", "미디"];
 const EMPTY_DETAILS: SubjectDetails = { 기타: [], 피아노: [], 트럼펫: [], 플루트: [] };
 
-function createEmptyDraft(): ConsultationInput {
+function createEmptyDraft(submissionSource: SubmissionSource): ConsultationInput {
   return {
     ...EMPTY_CONSULTATION,
+    submission_source: submissionSource,
     subjects: [],
     vocal_difficulties: [],
     lesson_experience: { hasExperience: null, subjects: "", period: "" },
@@ -77,7 +81,7 @@ function createEmptyDraft(): ConsultationInput {
 }
 
 function buildFlow(draft: ConsultationInput): StepId[] {
-  const steps: StepId[] = ["name", "birth", "phones", "subjects"];
+  const steps: StepId[] = ["name", "birth", "gender", "phones", "subjects"];
   if (draft.subjects.includes("보컬")) steps.push("vocal");
   if (draft.subjects.some((subject) => INSTRUMENTS.includes(subject))) steps.push("instrument");
   steps.push("purpose");
@@ -145,8 +149,8 @@ function Chip({
       type="button"
       aria-pressed={selected}
       onClick={onClick}
-      className={`inline-flex min-h-12 items-center rounded-[14px] border-[1.5px] text-left font-medium transition active:scale-[0.99] ${
-        compact ? "px-[15px] py-[11px] text-[0.95rem]" : "min-h-[54px] px-[19px] py-[14px] text-[1.05rem]"
+      className={`inline-flex max-w-full min-w-0 items-center justify-center whitespace-normal break-keep rounded-[14px] border-[1.5px] text-center font-medium leading-snug transition active:scale-[0.99] ${
+        compact ? "min-h-12 px-3.5 py-[11px] text-[0.92rem] sm:px-[15px] sm:text-[0.95rem]" : "min-h-[54px] px-4 py-[14px] text-base sm:px-[19px] sm:text-[1.05rem]"
       } ${
         selected
           ? "border-[#2b2723] bg-[#2b2723] font-semibold text-white"
@@ -160,7 +164,7 @@ function Chip({
 }
 
 function ChipWrap({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`flex flex-wrap gap-2.5 ${className}`}>{children}</div>;
+  return <div className={`flex flex-wrap items-stretch gap-2.5 ${className}`}>{children}</div>;
 }
 
 function Field({
@@ -181,12 +185,12 @@ function Field({
 }
 
 const inputClass =
-  "min-h-[54px] w-full rounded-xl border-[1.5px] border-[#d8d2c8] bg-[#faf9f6] px-3.5 py-3 text-[1.08rem] text-[#1e1c18] placeholder:text-[#aaa399] focus:border-[#e8a23d] focus:bg-white focus:outline-none";
+  "min-h-[54px] w-full min-w-0 rounded-xl border-[1.5px] border-[#d8d2c8] bg-[#faf9f6] px-3.5 py-3 text-base text-[#1e1c18] placeholder:text-[#aaa399] focus:border-[#e8a23d] focus:bg-white focus:outline-none sm:text-[1.08rem]";
 
 function QuestionHeading({ title, sub }: { title: React.ReactNode; sub?: React.ReactNode }) {
   return (
     <header>
-      <h2 className="text-[1.35rem] font-extrabold leading-[1.35] tracking-[-0.02em]">{title}</h2>
+      <h2 className="text-[1.22rem] font-extrabold leading-[1.4] tracking-[-0.02em] sm:text-[1.35rem]">{title}</h2>
       <div className={`text-[0.9rem] text-[#8a8378] ${sub ? "mt-1.5 mb-[22px]" : "mb-[22px]"}`}>
         {sub}
       </div>
@@ -198,8 +202,8 @@ function SubBlock({ children }: { children: React.ReactNode }) {
   return <div className="mt-[18px] rounded-[14px] bg-[#f7f4ee] p-4">{children}</div>;
 }
 
-export function ConsultationWizard() {
-  const [draft, setDraft] = useState<ConsultationInput>(createEmptyDraft);
+export function ConsultationWizard({ submissionSource }: { submissionSource: SubmissionSource }) {
+  const [draft, setDraft] = useState<ConsultationInput>(() => createEmptyDraft(submissionSource));
   const [details, setDetails] = useState<SubjectDetails>({ ...EMPTY_DETAILS });
   const [birth, setBirth] = useState({ year: "", month: "", day: "" });
   const [targetKnown, setTargetKnown] = useState<boolean | null>(null);
@@ -238,7 +242,7 @@ export function ConsultationWizard() {
   useEffect(() => {
     if (!submitted) return;
     const timer = window.setTimeout(() => {
-      setDraft(createEmptyDraft());
+      setDraft(createEmptyDraft(submissionSource));
       setDetails({ 기타: [], 피아노: [], 트럼펫: [], 플루트: [] });
       setBirth({ year: "", month: "", day: "" });
       setTargetKnown(null);
@@ -248,7 +252,7 @@ export function ConsultationWizard() {
       setSubmitted(false);
     }, 3000);
     return () => window.clearTimeout(timer);
-  }, [submitted]);
+  }, [submissionSource, submitted]);
 
   const years = useMemo(() => {
     if (!today) return [];
@@ -285,6 +289,7 @@ export function ConsultationWizard() {
     if (step === "birth" && [birth.year, birth.month, birth.day].some(Boolean) && !chosenBirthDate) {
       return "생년월일의 년, 월, 일을 모두 선택해 주세요";
     }
+    if (step === "gender" && !draft.gender) return "성별을 선택해 주세요";
     if (step === "phones" && (!validPhone(draft.student_phone) || !validPhone(draft.parent_phone))) {
       return "연락처를 10~11자리로 입력해 주세요";
     }
@@ -398,8 +403,8 @@ export function ConsultationWizard() {
 
   return (
     <main className="flex min-h-dvh max-h-dvh flex-col overflow-hidden bg-[#f4f2ee]">
-      <TopBar isIpsi={isIpsi && stepIndex >= flow.indexOf("purpose")} />
-      <div className="shrink-0 bg-[#2b2723] px-[22px] pb-3">
+      <TopBar isIpsi={isIpsi && stepIndex >= flow.indexOf("purpose")} label={submissionSource === "link" ? "온라인 작성" : "현장 작성"} />
+      <div className="shrink-0 bg-[#2b2723] px-4 pb-3 sm:px-[22px]">
         <div className="mb-1.5 flex justify-between text-[0.78rem] text-[#b5aea3]">
           <span>{STEP_LABELS[current]}</span>
           <span aria-label={`전체 ${flow.length}단계 중 ${stepIndex + 1}단계`}>{stepIndex + 1} / {flow.length}</span>
@@ -412,20 +417,20 @@ export function ConsultationWizard() {
         </div>
       </div>
 
-      <div ref={stageRef} className="flex flex-1 flex-col items-center overflow-y-auto px-5 py-6 overscroll-contain">
-        <section key={current} className="animate-card-in w-full max-w-[680px] rounded-[20px] bg-white px-5 py-7 shadow-[0_2px_10px_rgba(0,0,0,0.07)] sm:px-[30px] sm:pt-[34px] sm:pb-7">
+      <div ref={stageRef} className="flex flex-1 flex-col items-center overflow-y-auto px-3.5 py-4 overscroll-contain sm:px-5 sm:py-6">
+        <section key={current} className="animate-card-in w-full max-w-[680px] rounded-[18px] bg-white px-4 py-6 shadow-[0_2px_10px_rgba(0,0,0,0.07)] sm:rounded-[20px] sm:px-[30px] sm:pt-[34px] sm:pb-7">
           {renderCurrentStep()}
           {warning ? <p className="mt-3 text-[0.88rem] font-semibold text-[#c0392b]" role="alert">{warning}</p> : null}
           <nav className="mt-7 flex gap-2.5" aria-label="상담 카드 단계 이동">
             {stepIndex > 0 ? (
-              <button type="button" onClick={goPrevious} className="min-h-[54px] flex-1 rounded-[14px] bg-[#eee9e0] px-4 text-[1.05rem] font-extrabold text-[#4a453d] active:scale-[0.99]">← 이전</button>
+              <button type="button" onClick={goPrevious} className="min-h-[54px] flex-1 rounded-[14px] bg-[#eee9e0] px-3 text-base font-extrabold text-[#4a453d] active:scale-[0.99] sm:px-4 sm:text-[1.05rem]">← 이전</button>
             ) : null}
             {current === "summary" ? (
               <button type="button" onClick={submit} disabled={submitting} className="min-h-[54px] flex-[2.2] rounded-[14px] bg-[#2b2723] px-4 text-[1.05rem] font-extrabold text-white disabled:cursor-wait disabled:opacity-60">
                 {submitting ? "안전하게 저장 중…" : "이대로 제출 ✓"}
               </button>
             ) : (
-              <button type="button" onClick={goNext} className="min-h-[54px] flex-[2.2] rounded-[14px] bg-[#e8a23d] px-4 text-[1.05rem] font-extrabold text-[#2b2723] shadow-[0_4px_14px_rgba(232,162,61,0.35)] active:scale-[0.99]">
+              <button type="button" onClick={goNext} className="min-h-[54px] flex-[2.2] rounded-[14px] bg-[#e8a23d] px-3 text-base font-extrabold text-[#2b2723] shadow-[0_4px_14px_rgba(232,162,61,0.35)] active:scale-[0.99] sm:px-4 sm:text-[1.05rem]">
                 {current === "etc" ? "작성 완료 →" : "다음 →"}
               </button>
             )}
@@ -452,18 +457,29 @@ export function ConsultationWizard() {
             <QuestionHeading title="생년월일을 선택해 주세요" sub={age === null ? "나이는 자동으로 계산돼요" : <><b className="text-[#4a453d]">만 {age}세</b>로 계산되었어요</>} />
             <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
               <label className="sr-only" htmlFor="birth-year">태어난 연도</label>
-              <select id="birth-year" className={inputClass} value={birth.year} onChange={(event) => changeBirthYear(event.target.value)}>
+              <select id="birth-year" className={`${inputClass} px-2 text-[0.95rem] sm:px-3.5 sm:text-[1.08rem]`} value={birth.year} onChange={(event) => changeBirthYear(event.target.value)}>
                 <option value="">년</option>{years.map((year) => <option key={year} value={year}>{year}년</option>)}
               </select>
               <label className="sr-only" htmlFor="birth-month">태어난 월</label>
-              <select id="birth-month" className={inputClass} value={birth.month} onChange={(event) => changeBirthMonth(event.target.value)}>
+              <select id="birth-month" className={`${inputClass} px-2 text-[0.95rem] sm:px-3.5 sm:text-[1.08rem]`} value={birth.month} onChange={(event) => changeBirthMonth(event.target.value)}>
                 <option value="">월</option>{Array.from({ length: 12 }, (_, index) => index + 1).map((month) => <option key={month} value={month}>{month}월</option>)}
               </select>
               <label className="sr-only" htmlFor="birth-day">태어난 일</label>
-              <select id="birth-day" className={inputClass} value={birth.day} onChange={(event) => setBirth((previous) => ({ ...previous, day: event.target.value }))}>
+              <select id="birth-day" className={`${inputClass} px-2 text-[0.95rem] sm:px-3.5 sm:text-[1.08rem]`} value={birth.day} onChange={(event) => setBirth((previous) => ({ ...previous, day: event.target.value }))}>
                 <option value="">일</option>{Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => <option key={day} value={day}>{day}일</option>)}
               </select>
             </div>
+          </>
+        );
+      case "gender":
+        return (
+          <>
+            <QuestionHeading title="성별을 선택해 주세요" sub="하나만 선택해 주세요" />
+            <ChipWrap>
+              {["남", "여"].map((value) => (
+                <Chip key={value} selected={draft.gender === value} onClick={() => { patchDraft("gender", value); scheduleNext(); }}>{value}</Chip>
+              ))}
+            </ChipWrap>
           </>
         );
       case "phones":
@@ -519,7 +535,6 @@ export function ConsultationWizard() {
               <Field label="거주 지역"><input aria-label="거주 지역" className={inputClass} value={draft.region} onChange={(event) => patchDraft("region", event.target.value)} placeholder="예: 수원 영통구" /></Field>
             </div>
             <Field className="mt-4" label="재학 상태"><ChipWrap>{["재학", "휴학", "졸업"].map((value) => <Chip compact key={value} selected={draft.school_status === value} onClick={() => patchDraft("school_status", value)}>{value}</Chip>)}</ChipWrap></Field>
-            <Field className="mt-4" label="성별"><ChipWrap>{["남", "여"].map((value) => <Chip compact key={value} selected={draft.gender === value} onClick={() => patchDraft("gender", value)}>{value}</Chip>)}</ChipWrap></Field>
           </>
         );
       case "ipsi-type":
@@ -646,6 +661,7 @@ export function ConsultationWizard() {
       ["카드 종류", isIpsi ? "📚 입시 상담 카드" : "일반 상담 카드"],
       ["이름", draft.name],
       ["생년월일", chosenBirthDate ? `${chosenBirthDate.replaceAll("-", ".")} ${age === null ? "" : `(만 ${age}세)`}` : ""],
+      ["성별", draft.gender],
       ["학생 연락처", draft.student_phone],
       ["학부모 연락처", draft.parent_phone],
       ["관심 과목", detailSubjects(draft.subjects, details).join(", ")],
@@ -657,7 +673,6 @@ export function ConsultationWizard() {
       rows.push(
         ["학교", [draft.school, draft.school_status].filter(Boolean).join(" · ")],
         ["거주 지역", draft.region],
-        ["성별", draft.gender],
         ["입시 유형", [draft.ipsi_type, draft.ipsi_period].filter(Boolean).join(" / ")],
         ["목표 학교", targetKnown === false ? "잘 모른다" : draft.target_school],
         ["상담 내용", draft.consult_content],
@@ -682,9 +697,9 @@ export function ConsultationWizard() {
 
 function TopBar({ isIpsi, label = "학생 작성용" }: { isIpsi: boolean; label?: string }) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-3 bg-[#2b2723] px-[22px] py-3.5 text-white">
-      <h1 className="text-[1.05rem] font-bold tracking-[-0.01em]">라 실용음악학원 · 상담 카드</h1>
-      <div className="flex items-center gap-2">
+    <div className="flex shrink-0 items-center justify-between gap-2 bg-[#2b2723] px-4 py-3.5 text-white sm:gap-3 sm:px-[22px]">
+      <h1 className="min-w-0 flex-1 text-[0.95rem] font-bold leading-tight tracking-[-0.01em] sm:text-[1.05rem]">라 실용음악학원 · 상담 카드</h1>
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
         {isIpsi ? <span className="whitespace-nowrap rounded-full bg-[#6ba4d8] px-2.5 py-1 text-xs font-bold text-white">입시 상담</span> : null}
         <span className="whitespace-nowrap rounded-full bg-[#e8a23d] px-2.5 py-1 text-xs font-bold text-[#2b2723]">{label}</span>
       </div>

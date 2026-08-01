@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ConsultationLinkDialog } from "@/components/consultation-link-dialog";
 import type {
   ConsultationRecord,
   ConsultationStatus,
@@ -54,6 +55,7 @@ export function AdminDashboard() {
   const [cardFilter, setCardFilter] = useState<CardFilter>("전체");
   const [selected, setSelected] = useState<ConsultationRecord | null>(null);
   const [updatingId, setUpdatingId] = useState("");
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 
   const loadConsultations = useCallback(async () => {
     setLoading(true);
@@ -193,10 +195,11 @@ export function AdminDashboard() {
   return (
     <main className="min-h-dvh bg-[#f4f2ee]">
       <header className="sticky top-0 z-20 bg-[#2b2723] px-5 py-4 text-white shadow-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <div><h1 className="text-lg font-extrabold">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">최근 상담 {records.length}건</p></div>
-          <div className="flex gap-2">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <div><h1 className="text-base font-extrabold sm:text-lg">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">최근 상담 {records.length}건</p></div>
+          <div className="flex flex-wrap gap-2">
             <Link href="/consult" className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link>
+            <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-white px-3.5 text-sm font-extrabold text-[#2b2723]">상담 링크 보내기</button>
             <button type="button" onClick={logout} className="min-h-12 rounded-xl border border-[#6b6459] px-3.5 text-sm font-bold">로그아웃</button>
           </div>
         </div>
@@ -231,6 +234,7 @@ export function AdminDashboard() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-xl font-extrabold">{record.name}</h2>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.card_type === "입시" ? "bg-[#dcecf9] text-[#2f6d9f]" : "bg-[#eee9e0] text-[#5a5349]"}`}>{record.card_type}</span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.submission_source === "link" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}>{record.submission_source === "link" ? "링크 접수" : "현장"}</span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.status === "등록" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{record.status === "등록" ? "등록함" : "상담만 함"}</span>
                   </div>
                   <p className="mt-1.5 text-sm text-[#6b6459]">{record.student_phone || record.parent_phone || "연락처 없음"} · {record.subjects.join(", ") || "과목 미입력"}</p>
@@ -247,6 +251,7 @@ export function AdminDashboard() {
       </div>
 
       {selected ? <ConsultationDetail record={selected} busy={updatingId === selected.id} onClose={() => setSelected(null)} onStatus={(status) => void updateStatus(selected, status)} /> : null}
+      {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} /> : null}
     </main>
   );
 }
@@ -283,8 +288,10 @@ function ConsultationDetail({
   const rows: [string, string][] = [
     ["작성 일시", formatCreatedAt(record.created_at)],
     ["카드 종류", record.card_type],
+    ["접수 방식", record.submission_source === "link" ? "링크(원격)" : "현장 태블릿"],
     ["이름", record.name],
     ["생년월일", record.birth_date || ""],
+    ["성별", record.gender],
     ["학생 연락처", record.student_phone],
     ["학부모 연락처", record.parent_phone],
     ["관심 과목", record.subjects.join(", ")],
@@ -296,7 +303,6 @@ function ConsultationDetail({
     rows.push(
       ["학교", [record.school, record.school_status].filter(Boolean).join(" · ")],
       ["거주 지역", record.region],
-      ["성별", record.gender],
       ["입시 유형", [record.ipsi_type, record.ipsi_period].filter(Boolean).join(" / ")],
       ["목표 학교", record.target_school],
       ["상담 내용", record.consult_content],
