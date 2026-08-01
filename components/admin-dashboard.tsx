@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { BirthDateFields } from "@/components/birth-date-fields";
 import { ConsentDetailModal } from "@/components/consent-detail-modal";
 import { ConsultationLinkDialog } from "@/components/consultation-link-dialog";
 import { RegistrationConsentFlow } from "@/components/registration-consent-flow";
@@ -78,23 +79,39 @@ function reservationScheduleLabel(item: ReservationRecord["schedule_preferences"
   return `${days} · ${time}`;
 }
 
+function toTwelveHour(hour: string) {
+  if (!hour) return { period: "", hour: "" };
+  const normalizedHour = Number(hour) % 24;
+  return {
+    period: normalizedHour < 12 ? "오전" : "오후",
+    hour: String(normalizedHour % 12 || 12).padStart(2, "0"),
+  };
+}
+
+function toTwentyFourHour(period: string, hour: string) {
+  if (!period || !hour) return "";
+  const normalizedHour = Number(hour) % 12 + (period === "오후" ? 12 : 0);
+  return String(normalizedHour).padStart(2, "0");
+}
+
 function ReservationConfirmEditor({ record, busy, onSave }: { record: ReservationRecord; busy: boolean; onSave: (value: string) => void }) {
   const initial = datetimeLocalValue(record.confirmed_at);
   const [datePart = "", timePart = ""] = initial.split("T");
   const [initialYear = "", initialMonth = "", initialDay = ""] = datePart.split("-");
   const [initialHour = "", initialMinute = ""] = timePart.split(":");
+  const initialTwelveHour = toTwelveHour(initialHour);
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
   const [day, setDay] = useState(initialDay);
-  const [hour, setHour] = useState(initialHour);
+  const [period, setPeriod] = useState(initialTwelveHour.period);
+  const [hour, setHour] = useState(initialTwelveHour.hour);
   const [minute, setMinute] = useState(initialMinute);
-  const [currentYear] = useState(() => new Date().getFullYear());
-  const yearOptions = [...new Set([initialYear, String(currentYear), String(currentYear + 1)].filter(Boolean))].sort();
-  const value = year && month && day && hour && minute ? `${year}-${month}-${day}T${hour}:${minute}` : "";
+  const twentyFourHour = toTwentyFourHour(period, hour);
+  const value = /^\d{4}$/.test(year) && month && day && twentyFourHour && minute ? `${year}-${month}-${day}T${twentyFourHour}:${minute}` : "";
   const unchanged = value === initial;
   const selectClass = "min-h-12 min-w-0 rounded-xl border-[1.5px] border-[#d8d2c8] bg-white px-2 text-sm font-bold focus:border-[#e8a23d] focus:outline-none disabled:bg-[#eee9e0]";
   const disabled = busy || record.status === "상담완료";
-  return <div><p className="text-sm font-extrabold text-[#6b6459]">상담 확정 일시</p><div className="mt-1.5 grid grid-cols-3 gap-1.5"><select aria-label="확정 연도" value={year} onChange={(event) => setYear(event.target.value)} disabled={disabled} className={selectClass}><option value="">년</option>{yearOptions.map((item) => <option key={item} value={item}>{item}년</option>)}</select><select aria-label="확정 월" value={month} onChange={(event) => setMonth(event.target.value)} disabled={disabled} className={selectClass}><option value="">월</option>{Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}월</option>)}</select><select aria-label="확정 일" value={day} onChange={(event) => setDay(event.target.value)} disabled={disabled} className={selectClass}><option value="">일</option>{Array.from({ length: 31 }, (_, index) => String(index + 1).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}일</option>)}</select></div><div className="mt-1.5 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5"><select aria-label="확정 시" value={hour} onChange={(event) => setHour(event.target.value)} disabled={disabled} className={selectClass}><option value="">시</option>{Array.from({ length: 15 }, (_, index) => String(index + 9).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}시</option>)}</select><span className="font-black text-[#8a8378]">:</span><select aria-label="확정 분" value={minute} onChange={(event) => setMinute(event.target.value)} disabled={disabled} className={selectClass}><option value="">분</option>{["00", "10", "20", "30", "40", "50"].map((item) => <option key={item} value={item}>{item}분</option>)}</select></div><button type="button" disabled={busy || !value || unchanged || record.status === "상담완료"} onClick={() => onSave(value)} className="mt-2 min-h-12 w-full rounded-xl bg-[#e8a23d] px-4 text-sm font-black text-[#2b2723] disabled:bg-[#eee9e0] disabled:text-[#9a9389]">{busy ? "저장 중…" : "확정 일시 저장"}</button>{record.confirmed_at && record.status !== "상담완료" ? <button type="button" disabled={busy} onClick={() => onSave("")} className="mt-1.5 min-h-12 w-full rounded-xl bg-[#eee9e0] text-sm font-bold text-[#6b6459]">확정 취소</button> : null}</div>;
+  return <div><p className="text-sm font-extrabold text-[#6b6459]">상담 확정 일시</p><div className="mt-1.5"><BirthDateFields value={{ year, month, day }} onChange={(nextValue) => { setYear(nextValue.year); setMonth(nextValue.month); setDay(nextValue.day); }} inputClassName={selectClass} autoComplete={false} disabled={disabled} idPrefix={`reservation-confirm-${record.id}`} labelPrefix="상담 확정" /></div><div className="mt-1.5 grid grid-cols-3 gap-1.5"><select aria-label="확정 오전 또는 오후" value={period} onChange={(event) => setPeriod(event.target.value)} disabled={disabled} className={selectClass}><option value="">오전/오후</option><option value="오전">오전</option><option value="오후">오후</option></select><select aria-label="확정 시" value={hour} onChange={(event) => setHour(event.target.value)} disabled={disabled} className={selectClass}><option value="">시</option>{Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}시</option>)}</select><select aria-label="확정 분" value={minute} onChange={(event) => setMinute(event.target.value)} disabled={disabled} className={selectClass}><option value="">분</option>{["00", "10", "20", "30", "40", "50"].map((item) => <option key={item} value={item}>{item}분</option>)}</select></div><button type="button" disabled={busy || !value || unchanged || record.status === "상담완료"} onClick={() => onSave(value)} className="mt-2 min-h-12 w-full rounded-xl bg-[#e8a23d] px-4 text-sm font-black text-[#2b2723] disabled:bg-[#eee9e0] disabled:text-[#9a9389]">{busy ? "저장 중…" : "확정 일시 저장"}</button>{record.confirmed_at && record.status !== "상담완료" ? <button type="button" disabled={busy} onClick={() => onSave("")} className="mt-1.5 min-h-12 w-full rounded-xl bg-[#eee9e0] text-sm font-bold text-[#6b6459]">확정 취소</button> : null}</div>;
 }
 
 export function AdminDashboard({ initialView = "consultations" }: { initialView?: AdminView }) {
