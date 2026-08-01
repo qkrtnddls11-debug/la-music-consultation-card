@@ -85,3 +85,31 @@ export async function PATCH(
     return Response.json({ error: "진단서를 저장하는 중 오류가 발생했습니다." }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    if (!(await hasAdminSession())) {
+      return Response.json({ error: "인증이 필요합니다." }, { status: 401 });
+    }
+    const { id } = await params;
+    const { data, error } = await createAdminSupabase()
+      .from("vocal_diagnoses")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      console.error("vocal diagnosis delete failed", { code: error.code, message: error.message });
+      return Response.json({ error: "진단서를 삭제하지 못했습니다." }, { status: 502 });
+    }
+    if (!data) return Response.json({ error: "진단서를 찾지 못했습니다." }, { status: 404 });
+    return Response.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    console.error("vocal diagnosis delete route failed", error);
+    return Response.json({ error: "진단서 삭제 중 오류가 발생했습니다." }, { status: 500 });
+  }
+}

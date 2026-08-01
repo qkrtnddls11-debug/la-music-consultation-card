@@ -59,3 +59,77 @@ export async function PATCH(
     return Response.json({ error: "상태 변경 중 오류가 발생했습니다." }, { status: 500 });
   }
 }
+
+const SIGNATURE_BUCKET = "consent-signatures";
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    if (!(await hasAdminSession())) {
+      return Response.json({ error: "인증이 필요합니다." }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const supabase = createAdminSupabase();
+    const { data: consultation, error: consultationError } = await supabase
+      .from("consultations")
+      .select("id,reservation_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (consultationError) return Response.json({ error: "상담 기록을 확인하지 못했습니다." }, { status: 502 });
+    if (!consultation) return Response.json({ error: "상담 기록을 찾지 못했습니다." }, { status: 404 });
+
+    const { data: consent, error: consentQueryError } = await supabase
+      .from("consents")
+      .select("id,name_trace_path,signature_path")
+      .eq("consultation_id", id)
+      .maybeSingle();
+    if (consentQueryError) return Response.json({ error: "연결된 동의서를 확인하지 못했습니다." }, { status: 502 });
+
+    if (consent) {
+      const { error: consentDeleteError } = await supabase.from("consents").delete().eq("id", consent.id);
+      if (consentDeleteError) return Response.json({ error: "연결된 동의서를 삭제하지 못했습니다." }, { status: 502 });
+    }
+
+    const { data: deleted, error: deleteError } = await supabase
+      .from("consultations")
+      .delete()
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+    if (deleteError) {
+      console.error("consultation delete failed", { code: deleteError.code, message: deleteError.message });
+      return Response.json({ error: "상담 기록을 삭제하지 못했습니다." }, { status: 502 });
+    }
+    if (!deleted) return Response.json({ error: "상담 기록을 찾지 못했습니다." }, { status: 404 });
+
+    if (consent) {
+      const paths = [consent.name_trace_path, consent.signature_path].filter(Boolean);
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage.from(SIGNATURE_BUCKET).remove(paths);
+        if (storageError) console.error("consent signature cleanup failed", { message: storageError.message });
+      }
+    }
+
+    if (consultation.reservation_id) {
+      const { data: reservation } = await supabase
+        .from("reservations")
+        .select("confirmed_at")
+        .eq("id", consultation.reservation_id)
+        .maybeSingle();
+      if (reservation) {
+        await supabase
+          .from("reservations")
+          .update({ status: reservation.confirmed_at ? "확정" : "대기" })
+          .eq("id", consultation.reservation_id);
+      }
+    }
+
+    return Response.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
+  } catch (error) {
+    console.error("consultation delete route failed", error);
+    return Response.json({ error: "상담 기록 삭제 중 오류가 발생했습니다." }, { status: 500 });
+  }
+}

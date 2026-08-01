@@ -21,6 +21,7 @@ import type {
 type AuthState = "checking" | "signed-out" | "signed-in";
 type CardFilter = "전체" | "일반" | "입시";
 type AdminView = "consultations" | "reservations" | "diagnoses";
+type DeleteTarget = "consultation" | "reservation" | "diagnosis";
 type DiagnosisEditorState = {
   diagnosis: VocalDiagnosisRecord | null;
   consultation: ConsultationRecord | null;
@@ -118,6 +119,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
   const [renderedAt] = useState(() => Date.now());
   const [selected, setSelected] = useState<ConsultationRecord | null>(null);
   const [updatingId, setUpdatingId] = useState("");
+  const [deletingKey, setDeletingKey] = useState("");
   const [diagnosisBusyId, setDiagnosisBusyId] = useState("");
   const [diagnosisEditor, setDiagnosisEditor] = useState<DiagnosisEditorState | null>(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -332,6 +334,58 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
     finally { setUpdatingId(""); }
   }
 
+  async function deleteRecord(target: DeleteTarget, id: string, name: string) {
+    const label = target === "consultation" ? "상담 기록" : target === "reservation" ? "상담 예약" : "보컬 진단서";
+    const linkedNotice = target === "consultation"
+      ? "\n연결된 동의서·서명 요청도 함께 삭제됩니다. 보컬 진단서는 남고 상담 연결만 해제됩니다."
+      : target === "reservation"
+        ? "\n이미 작성된 상담 기록은 삭제되지 않고 예약 연결만 해제됩니다."
+        : "";
+    if (!window.confirm(`${name}님의 ${label}을 삭제할까요?${linkedNotice}\n\n삭제 후에는 되돌릴 수 없습니다.`)) return;
+
+    const endpoint = target === "consultation"
+      ? `/api/admin/consultations/${id}`
+      : target === "reservation"
+        ? `/api/admin/reservations/${id}`
+        : `/api/admin/vocal-diagnoses/${id}`;
+    const key = `${target}:${id}`;
+    setDeletingKey(key);
+    setLoadError("");
+    try {
+      const response = await fetch(endpoint, { method: "DELETE" });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || `${label}을 삭제하지 못했습니다.`);
+
+      if (target === "reservation") {
+        setReservations((current) => current.filter((item) => item.id !== id));
+        setRecords((current) => current.map((item) => item.reservation_id === id ? { ...item, reservation_id: null } : item));
+        setSelected((current) => current?.reservation_id === id ? { ...current, reservation_id: null } : current);
+      } else if (target === "consultation") {
+        const deleted = records.find((item) => item.id === id);
+        setRecords((current) => current.filter((item) => item.id !== id));
+        setDiagnoses((current) => current.map((item) => item.consultation_id === id ? { ...item, consultation_id: null } : item));
+        setConsents((current) => current.filter((item) => item.consultation_id !== id));
+        setConsentRequests((current) => current.filter((item) => item.consultation_id !== id));
+        if (deleted?.reservation_id) {
+          setReservations((current) => current.map((item) => item.id === deleted.reservation_id
+            ? { ...item, status: item.confirmed_at ? "확정" : "대기" }
+            : item));
+        }
+        setSelected((current) => current?.id === id ? null : current);
+        setRegistrationRecord((current) => current?.id === id ? null : current);
+        setSignatureRecord((current) => current?.id === id ? null : current);
+        setConsentViewer((current) => current?.consultation.id === id ? null : current);
+      } else {
+        setDiagnoses((current) => current.filter((item) => item.id !== id));
+        setDiagnosisEditor((current) => current?.diagnosis?.id === id ? null : current);
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : `${label}을 삭제하지 못했습니다.`);
+    } finally {
+      setDeletingKey("");
+    }
+  }
+
   const storeConsentRequest = useCallback((request: ConsentRequestRecord) => {
     setConsentRequests((current) => [request, ...current.filter((item) => item.id !== request.id)]);
   }, []);
@@ -507,6 +561,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
                   ) : null}
                   <button type="button" onClick={() => setSelected(record)} className="min-h-12 rounded-xl bg-[#eee9e0] px-4 text-sm font-bold text-[#4a453d]">상세 보기</button>
                   <button type="button" disabled={updatingId === record.id} onClick={() => void updateStatus(record, record.status === "상담" || !consentByConsultation.has(record.id) ? "등록" : "상담")} className={`min-h-12 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50 ${record.status === "상담" || !consentByConsultation.has(record.id) ? "bg-[#e8a23d] text-[#2b2723]" : "bg-[#2b2723] text-white"}`}>{record.status === "상담" ? "등록으로 변경" : consentByConsultation.has(record.id) ? "상담으로 변경" : "동의서 받기"}</button>
+                  <button type="button" disabled={deletingKey === `consultation:${record.id}`} onClick={() => void deleteRecord("consultation", record.id, record.name)} className="min-h-12 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `consultation:${record.id}` ? "삭제 중…" : "삭제"}</button>
                 </div>
               </div>
             </article>
@@ -529,6 +584,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
                   <div className="w-full max-w-sm space-y-3 sm:w-[310px]">
                     <ReservationConfirmEditor key={reservation.confirmed_at ?? "empty"} record={reservation} busy={updatingId === reservation.id} onSave={(value) => void updateReservationTime(reservation, value)} />
                     {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button> : <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2b2723] px-4 text-sm font-black text-white">상담 시작 →</Link>}
+                    <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button>
                   </div>
                 </div>
               </article>;
@@ -555,7 +611,10 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
                       <p className="mt-1.5 text-sm font-semibold text-[#6b6459]">진성 {rangeLabel(diagnosis.chest_low_note, diagnosis.chest_high_note)} · 가성 {rangeLabel(diagnosis.falsetto_low_note, diagnosis.falsetto_high_note)}</p>
                       <p className="mt-1 text-xs text-[#9a9389]">작성 {formatCreatedAt(diagnosis.created_at)} · 수정 {formatCreatedAt(diagnosis.updated_at)}</p>
                     </button>
-                    <button type="button" onClick={() => setDiagnosisEditor({ diagnosis, consultation })} className="min-h-12 rounded-xl bg-violet-100 px-4 text-sm font-extrabold text-violet-900">진단서 보기</button>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => setDiagnosisEditor({ diagnosis, consultation })} className="min-h-12 rounded-xl bg-violet-100 px-4 text-sm font-extrabold text-violet-900">진단서 보기</button>
+                      <button type="button" disabled={deletingKey === `diagnosis:${diagnosis.id}`} onClick={() => void deleteRecord("diagnosis", diagnosis.id, diagnosis.student_name)} className="min-h-12 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `diagnosis:${diagnosis.id}` ? "삭제 중…" : "삭제"}</button>
+                    </div>
                   </div>
                 </article>
               );
@@ -564,7 +623,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
         )}
       </div>
 
-      {selected ? <ConsultationDetail record={selected} reservation={selected.reservation_id ? reservationById.get(selected.reservation_id) : undefined} diagnosis={diagnosisByConsultation.get(selected.id)} consent={consentByConsultation.get(selected.id)} consentRequest={latestRequestByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onConsent={() => { const consent = consentByConsultation.get(selected.id); if (consent) setConsentViewer({ consentId: consent.id, consultation: selected }); }} onSignatureLink={() => { setSignatureRecord(selected); setSelected(null); }} onRecordUpdate={(record) => { setRecords((current) => current.map((item) => item.id === record.id ? record : item)); setSelected(record); }} onStatus={(status) => void updateStatus(selected, status)} /> : null}
+      {selected ? <ConsultationDetail record={selected} reservation={selected.reservation_id ? reservationById.get(selected.reservation_id) : undefined} diagnosis={diagnosisByConsultation.get(selected.id)} consent={consentByConsultation.get(selected.id)} consentRequest={latestRequestByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id || deletingKey === `consultation:${selected.id}`} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onConsent={() => { const consent = consentByConsultation.get(selected.id); if (consent) setConsentViewer({ consentId: consent.id, consultation: selected }); }} onSignatureLink={() => { setSignatureRecord(selected); setSelected(null); }} onRecordUpdate={(record) => { setRecords((current) => current.map((item) => item.id === record.id ? record : item)); setSelected(record); }} onStatus={(status) => void updateStatus(selected, status)} onDelete={() => void deleteRecord("consultation", selected.id, selected.name)} /> : null}
       {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} /> : null}
       {diagnosisEditor ? <VocalDiagnosisEditor initialDiagnosis={diagnosisEditor.diagnosis} consultation={diagnosisEditor.consultation} onClose={() => setDiagnosisEditor(null)} onSaved={upsertDiagnosis} /> : null}
       {registrationRecord ? <RegistrationConsentFlow consultation={registrationRecord} onClose={() => setRegistrationRecord(null)} onComplete={completeRegistration} /> : null}
@@ -588,6 +647,7 @@ function ConsultationDetail({
   onSignatureLink,
   onRecordUpdate,
   onStatus,
+  onDelete,
 }: {
   record: ConsultationRecord;
   reservation?: ReservationRecord;
@@ -602,6 +662,7 @@ function ConsultationDetail({
   onSignatureLink: () => void;
   onRecordUpdate: (record: ConsultationRecord) => void;
   onStatus: (status: ConsultationStatus) => void;
+  onDelete: () => void;
 }) {
   const [memo, setMemo] = useState(record.admin_memo || "");
   const [memoBusy, setMemoBusy] = useState(false);
@@ -700,6 +761,7 @@ function ConsultationDetail({
             {rows.map(([label, value]) => value ? <div key={label} className="contents"><dt className="font-bold text-[#6b6459]">{label}</dt><dd className="whitespace-pre-line break-words leading-relaxed">{value}</dd></div> : null)}
           </dl>
           <section className="mt-6 rounded-[16px] bg-[#2b2723] p-4 text-white"><label htmlFor="detail-admin-memo" className="font-black">관리자 메모</label><textarea id="detail-admin-memo" value={memo} onChange={(event) => setMemo(event.target.value)} className="mt-2 min-h-[150px] w-full resize-y rounded-xl bg-white p-3 text-[#2b2723] focus:outline-none" placeholder="상담 중 기록한 관리자 메모" /><div className="mt-3 flex items-center gap-3"><button type="button" disabled={memoBusy || memo === (record.admin_memo || "")} onClick={() => void saveMemo()} className="min-h-12 rounded-xl bg-[#e8a23d] px-5 font-black text-[#2b2723] disabled:opacity-50">{memoBusy ? "저장 중…" : "메모 저장"}</button>{memoMessage ? <p className="text-sm font-bold text-[#f4cf91]">{memoMessage}</p> : null}</div></section>
+          <button type="button" disabled={busy} onClick={onDelete} className="mt-5 min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-extrabold text-red-700 disabled:opacity-50">{busy ? "처리 중…" : "이 상담 기록 삭제"}</button>
         </div>
       </section>
     </div>
