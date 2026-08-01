@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { birthDateFromInput, birthInputFromDate, formatBirthInput } from "@/lib/birth-date";
 import {
   COMMON_INSTRUMENT_DIFFICULTIES,
   DAYS,
@@ -141,11 +142,6 @@ function instrumentDifficultyOptions(subjects: string[]) {
   return [...options];
 }
 
-function birthDate(year: string, month: string, day: string) {
-  if (!year || !month || !day) return null;
-  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-}
-
 function getAge(date: string | null, today: Date | null) {
   if (!date || !today) return null;
   const [year, month, day] = date.split("-").map(Number);
@@ -249,7 +245,7 @@ function SubBlock({ children }: { children: React.ReactNode }) {
 export function ConsultationWizard({ submissionSource, reservationId }: { submissionSource: SubmissionSource; reservationId?: string }) {
   const [draft, setDraft] = useState<ConsultationInput>(() => createEmptyDraft(submissionSource));
   const [details, setDetails] = useState<SubjectDetails>({ ...EMPTY_DETAILS });
-  const [birth, setBirth] = useState({ year: "", month: "", day: "" });
+  const [birthInput, setBirthInput] = useState("");
   const [targetKnown, setTargetKnown] = useState<boolean | null>(null);
   const [genreKnown, setGenreKnown] = useState<boolean | null>(null);
   const [current, setCurrent] = useState<StepId>("name");
@@ -268,7 +264,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
   const flow = useMemo(() => buildFlow(draft), [draft]);
   const stepIndex = Math.max(0, flow.indexOf(current));
   const isIpsi = draft.purpose === "프로·입시";
-  const chosenBirthDate = birthDate(birth.year, birth.month, birth.day);
+  const chosenBirthDate = today ? birthDateFromInput(birthInput, today) || null : null;
   const age = getAge(chosenBirthDate, today);
 
   useEffect(() => {
@@ -299,8 +295,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
           card_type: result.lesson_type === "입시" ? "입시" : "일반",
         };
         setDetails(parsed.details);
-        const [year = "", month = "", day = ""] = result.birth_date.split("-");
-        setBirth({ year, month: String(Number(month)), day: String(Number(day)) });
+        setBirthInput(birthInputFromDate(result.birth_date));
         setDraft(merged);
         const nextStep = parsed.subjects.includes("보컬")
           ? "vocal"
@@ -339,7 +334,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
       }
       setDraft(createEmptyDraft(submissionSource));
       setDetails({ 기타: [], 피아노: [], 트럼펫: [], 플루트: [] });
-      setBirth({ year: "", month: "", day: "" });
+      setBirthInput("");
       setTargetKnown(null);
       setGenreKnown(null);
       setCurrent("name");
@@ -349,40 +344,14 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
     return () => window.clearTimeout(timer);
   }, [reservationId, submissionSource, submitted]);
 
-  const years = useMemo(() => {
-    if (!today) return [];
-    return Array.from({ length: 67 }, (_, index) => today.getFullYear() - 4 - index);
-  }, [today]);
-
-  const daysInMonth = useMemo(() => {
-    if (!birth.month) return 31;
-    return new Date(Number(birth.year) || today?.getFullYear() || 2000, Number(birth.month), 0).getDate();
-  }, [birth.month, birth.year, today]);
-
-  function changeBirthYear(year: string) {
-    setBirth((previous) => {
-      if (!previous.month || !previous.day) return { ...previous, year };
-      const maximum = new Date(Number(year) || today?.getFullYear() || 2000, Number(previous.month), 0).getDate();
-      return { ...previous, year, day: String(Math.min(Number(previous.day), maximum)) };
-    });
-  }
-
-  function changeBirthMonth(month: string) {
-    setBirth((previous) => {
-      if (!month || !previous.day) return { ...previous, month };
-      const maximum = new Date(Number(previous.year) || today?.getFullYear() || 2000, Number(month), 0).getDate();
-      return { ...previous, month, day: String(Math.min(Number(previous.day), maximum)) };
-    });
-  }
-
   function patchDraft<K extends keyof ConsultationInput>(key: K, value: ConsultationInput[K]) {
     setDraft((previous) => ({ ...previous, [key]: value }));
   }
 
   function validateStep(step: StepId) {
     if (step === "name" && !draft.name.trim()) return "이름을 입력해 주세요";
-    if (step === "birth" && [birth.year, birth.month, birth.day].some(Boolean) && !chosenBirthDate) {
-      return "생년월일의 년, 월, 일을 모두 선택해 주세요";
+    if (step === "birth" && birthInput && !chosenBirthDate) {
+      return "생년월일 숫자 8자리를 올바르게 입력해 주세요";
     }
     if (step === "gender" && !draft.gender) return "성별을 선택해 주세요";
     if (step === "phones" && (!validPhone(draft.student_phone) || !validPhone(draft.parent_phone))) {
@@ -563,21 +532,9 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
       case "birth":
         return (
           <>
-            <QuestionHeading title="생년월일을 선택해 주세요" sub={age === null ? "나이는 자동으로 계산돼요" : <><b className="text-[#4a453d]">만 {age}세</b>로 계산되었어요</>} />
-            <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
-              <label className="sr-only" htmlFor="birth-year">태어난 연도</label>
-              <select id="birth-year" className={`${inputClass} px-2 text-[0.95rem] sm:px-3.5 sm:text-[1.08rem]`} value={birth.year} onChange={(event) => changeBirthYear(event.target.value)}>
-                <option value="">년</option>{years.map((year) => <option key={year} value={year}>{year}년</option>)}
-              </select>
-              <label className="sr-only" htmlFor="birth-month">태어난 월</label>
-              <select id="birth-month" className={`${inputClass} px-2 text-[0.95rem] sm:px-3.5 sm:text-[1.08rem]`} value={birth.month} onChange={(event) => changeBirthMonth(event.target.value)}>
-                <option value="">월</option>{Array.from({ length: 12 }, (_, index) => index + 1).map((month) => <option key={month} value={month}>{month}월</option>)}
-              </select>
-              <label className="sr-only" htmlFor="birth-day">태어난 일</label>
-              <select id="birth-day" className={`${inputClass} px-2 text-[0.95rem] sm:px-3.5 sm:text-[1.08rem]`} value={birth.day} onChange={(event) => setBirth((previous) => ({ ...previous, day: event.target.value }))}>
-                <option value="">일</option>{Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => <option key={day} value={day}>{day}일</option>)}
-              </select>
-            </div>
+            <QuestionHeading title="생년월일을 입력해 주세요" sub={age === null ? "숫자 8자리만 입력하면 돼요. 예: 20010415" : <><b className="text-[#4a453d]">만 {age}세</b>로 계산되었어요</>} />
+            <label className="sr-only" htmlFor="birth-date-input">생년월일 8자리</label>
+            <input id="birth-date-input" type="text" inputMode="numeric" autoComplete="bday" className={`${inputClass} text-lg font-bold tracking-wide`} value={birthInput} onChange={(event) => setBirthInput(formatBirthInput(event.target.value))} placeholder="예: 2001.04.15" maxLength={10} autoFocus />
           </>
         );
       case "gender":

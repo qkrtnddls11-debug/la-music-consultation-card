@@ -3,6 +3,7 @@ import type {
   ReservationSchedulePreference,
   ReservationSource,
 } from "@/lib/types";
+import { DAYS, TIME_SLOTS } from "@/lib/types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -20,10 +21,14 @@ function cleanSchedule(value: unknown): ReservationSchedulePreference[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 3).map((item, index) => {
     const source = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const legacyDay = clean(source.day, 10);
+    const days = Array.isArray(source.days)
+      ? source.days.filter((day): day is string => typeof day === "string" && DAYS.includes(day as (typeof DAYS)[number])).slice(0, DAYS.length)
+      : legacyDay ? [legacyDay] : [];
     return {
       rank: (index + 1) as 1 | 2 | 3,
-      day: clean(source.day, 10),
-      timeText: clean(source.timeText, 120),
+      days,
+      timeSlot: clean(source.timeSlot, 40) || clean(source.timeText, 120),
     };
   });
 }
@@ -38,6 +43,7 @@ export function normalizeReservation(value: unknown): { data?: ReservationInput;
   const subjects = cleanSubjects(source.subjects);
   const lessonType = clean(source.lesson_type, 4);
   const schedule = cleanSchedule(source.schedule_preferences);
+  const scheduleNote = clean(source.schedule_note, 500);
   const phoneDigits = phone.replace(/\D/g, "");
 
   if (!name) return { error: "성함을 입력해 주세요." };
@@ -46,8 +52,14 @@ export function normalizeReservation(value: unknown): { data?: ReservationInput;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return { error: "생년월일을 모두 선택해 주세요." };
   if (subjects.length === 0) return { error: "희망 과목을 하나 이상 선택해 주세요." };
   if (lessonType !== "입시" && lessonType !== "취미") return { error: "입시 또는 취미를 선택해 주세요." };
-  if (schedule.length !== 3 || schedule.some((item) => !item.day || !item.timeText)) {
-    return { error: "희망 시간대 3개를 모두 입력해 주세요." };
+  if (schedule.length !== 3 || !schedule[0]?.days.length || !schedule[0]?.timeSlot) {
+    return { error: "1순위 요일과 시간대를 선택해 주세요." };
+  }
+  if (schedule.some((item) => (item.days.length > 0 || item.timeSlot) && (!item.days.length || !item.timeSlot))) {
+    return { error: "선택한 순위는 요일과 시간대를 모두 골라 주세요." };
+  }
+  if (schedule.some((item) => item.timeSlot && !TIME_SLOTS.includes(item.timeSlot as (typeof TIME_SLOTS)[number]))) {
+    return { error: "시간대를 다시 선택해 주세요." };
   }
 
   const requestedSource = clean(source.source, 10);
@@ -61,6 +73,7 @@ export function normalizeReservation(value: unknown): { data?: ReservationInput;
       subjects,
       lesson_type: lessonType,
       schedule_preferences: schedule,
+      schedule_note: scheduleNote,
       source: reservationSource,
     },
   };

@@ -57,8 +57,10 @@ export type SchedulePreference = {
 
 export type ReservationSchedulePreference = {
   rank: 1 | 2 | 3;
-  day: string;
-  timeText: string;
+  days: string[];
+  timeSlot: string;
+  day?: string;
+  timeText?: string;
 };
 
 export type ReservationInput = {
@@ -69,6 +71,7 @@ export type ReservationInput = {
   subjects: string[];
   lesson_type: "입시" | "취미" | "";
   schedule_preferences: ReservationSchedulePreference[];
+  schedule_note: string;
   source: ReservationSource;
 };
 
@@ -237,9 +240,9 @@ export const EMPTY_CONSULTATION: ConsultationInput = {
 };
 
 export const EMPTY_RESERVATION_SCHEDULE: ReservationSchedulePreference[] = [
-  { rank: 1, day: "", timeText: "" },
-  { rank: 2, day: "", timeText: "" },
-  { rank: 3, day: "", timeText: "" },
+  { rank: 1, days: [], timeSlot: "" },
+  { rank: 2, days: [], timeSlot: "" },
+  { rank: 3, days: [], timeSlot: "" },
 ];
 
 export const EMPTY_VOCAL_DIAGNOSIS: VocalDiagnosisInput = {

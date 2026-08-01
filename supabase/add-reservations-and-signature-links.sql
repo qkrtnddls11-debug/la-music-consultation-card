@@ -11,6 +11,7 @@ create table if not exists public.reservations (
   subjects text[] not null default '{}',
   lesson_type text not null check (lesson_type in ('입시', '취미')),
   schedule_preferences jsonb not null default '[]'::jsonb check (jsonb_typeof(schedule_preferences) = 'array'),
+  schedule_note text not null default '',
   status text not null default '대기' check (status in ('대기', '확정', '상담완료')),
   confirmed_at timestamptz,
   source text not null default 'link' check (source in ('link', 'tablet', 'crm'))
@@ -22,7 +23,7 @@ create index if not exists reservations_confirmed_at_idx on public.reservations 
 
 alter table public.reservations enable row level security;
 revoke all on table public.reservations from anon, authenticated;
-grant insert (name, phone, gender, birth_date, subjects, lesson_type, schedule_preferences, source)
+grant insert (name, phone, gender, birth_date, subjects, lesson_type, schedule_preferences, schedule_note, source)
 on table public.reservations to anon;
 grant all on table public.reservations to service_role;
 
