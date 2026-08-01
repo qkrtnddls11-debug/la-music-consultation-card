@@ -144,6 +144,8 @@ export type VocalDiagnosisRecord = VocalDiagnosisInput & {
   id: string;
   created_at: string;
   updated_at: string;
+  branch_name?: string;
+  author_name?: string | null;
 };
 
 export type ConsentRecord = {

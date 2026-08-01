@@ -109,6 +109,8 @@ create table public.vocal_diagnoses (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  branch_name text not null default '수원 망포점',
+  author_name text,
   consultation_id uuid unique references public.consultations(id) on delete set null,
   student_name text not null check (char_length(student_name) between 1 and 80),
   confirmation_notes text not null default '',
