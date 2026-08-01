@@ -17,7 +17,22 @@ export async function PATCH(
       return Response.json({ error: "상태값이 올바르지 않습니다." }, { status: 400 });
     }
 
-    const { error } = await createAdminSupabase()
+    const supabase = createAdminSupabase();
+    if (body.status === "등록") {
+      const { data: consent, error: consentError } = await supabase
+        .from("consents")
+        .select("id")
+        .eq("consultation_id", id)
+        .maybeSingle();
+      if (consentError) {
+        return Response.json({ error: "동의서 완료 여부를 확인하지 못했습니다." }, { status: 502 });
+      }
+      if (!consent) {
+        return Response.json({ error: "동의서와 전자서명을 먼저 완료해 주세요." }, { status: 409 });
+      }
+    }
+
+    const { error } = await supabase
       .from("consultations")
       .update({ status: body.status })
       .eq("id", id);

@@ -36,6 +36,8 @@ export const TIME_SLOTS = ["오전 11~1시", "오후 1~4시", "오후 4~7시", "
 export type CardType = "일반" | "입시";
 export type ConsultationStatus = "상담" | "등록";
 export type SubmissionSource = "tablet" | "link";
+export type ConsentChoice = "동의함" | "동의하지 않음";
+export type SignerRole = "본인" | "법정대리인";
 export const DIAGNOSIS_LEVELS = ["상", "중상", "중", "중하", "하"] as const;
 export type DiagnosisLevel = "" | (typeof DIAGNOSIS_LEVELS)[number];
 
@@ -114,6 +116,42 @@ export type VocalDiagnosisRecord = VocalDiagnosisInput & {
   id: string;
   created_at: string;
   updated_at: string;
+};
+
+export type ConsentRecord = {
+  id: string;
+  created_at: string;
+  consultation_id: string;
+  signer_name: string;
+  signer_role: SignerRole;
+  rules_agreed: boolean;
+  required_info_agreed: boolean;
+  unique_identifier_consent: ConsentChoice;
+  optional_info_consent: ConsentChoice;
+  marketing_consent: ConsentChoice;
+  is_minor: boolean;
+  guardian_name: string;
+  guardian_phone: string;
+  guardian_relationship: string;
+  name_trace_path?: string;
+  signature_path?: string;
+  name_trace_url?: string;
+  signature_url?: string;
+  agreed_at: string;
+};
+
+export type ConsentSubmission = {
+  consultation_id: string;
+  rules_agreed: boolean;
+  required_info_agreed: boolean;
+  unique_identifier_consent: ConsentChoice;
+  optional_info_consent: ConsentChoice;
+  marketing_consent: ConsentChoice;
+  guardian_name: string;
+  guardian_phone: string;
+  guardian_relationship: string;
+  name_trace_image: string;
+  signature_image: string;
 };
 
 export const EMPTY_SCHEDULE: SchedulePreference[] = [

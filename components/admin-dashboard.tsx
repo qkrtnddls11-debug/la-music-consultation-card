@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ConsentDetailModal } from "@/components/consent-detail-modal";
 import { ConsultationLinkDialog } from "@/components/consultation-link-dialog";
+import { RegistrationConsentFlow } from "@/components/registration-consent-flow";
 import { VocalDiagnosisEditor } from "@/components/vocal-diagnosis-editor";
 import type {
+  ConsentRecord,
   ConsultationRecord,
   ConsultationStatus,
   LessonExperience,
@@ -61,8 +64,10 @@ export function AdminDashboard() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [records, setRecords] = useState<ConsultationRecord[]>([]);
   const [diagnoses, setDiagnoses] = useState<VocalDiagnosisRecord[]>([]);
+  const [consents, setConsents] = useState<ConsentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [diagnosesLoading, setDiagnosesLoading] = useState(false);
+  const [consentsLoading, setConsentsLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [cardFilter, setCardFilter] = useState<CardFilter>("전체");
@@ -72,6 +77,8 @@ export function AdminDashboard() {
   const [diagnosisBusyId, setDiagnosisBusyId] = useState("");
   const [diagnosisEditor, setDiagnosisEditor] = useState<DiagnosisEditorState | null>(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [registrationRecord, setRegistrationRecord] = useState<ConsultationRecord | null>(null);
+  const [consentViewer, setConsentViewer] = useState<{ consentId: string; consultation: ConsultationRecord } | null>(null);
 
   const loadConsultations = useCallback(async () => {
     setLoading(true);
@@ -118,6 +125,28 @@ export function AdminDashboard() {
     }
   }, []);
 
+  const loadConsents = useCallback(async () => {
+    setConsentsLoading(true);
+    setLoadError("");
+    try {
+      const response = await fetch("/api/admin/consents", { cache: "no-store" });
+      if (response.status === 401) {
+        setAuth("signed-out");
+        setConsents([]);
+        return;
+      }
+      const result = (await response.json()) as ConsentRecord[] | { error?: string };
+      if (!response.ok || !Array.isArray(result)) {
+        throw new Error(!Array.isArray(result) && result.error ? result.error : "동의서 목록을 불러오지 못했습니다.");
+      }
+      setConsents(result);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "동의서 목록을 불러오지 못했습니다.");
+    } finally {
+      setConsentsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     async function checkSession() {
@@ -126,7 +155,7 @@ export function AdminDashboard() {
         if (cancelled) return;
         if (response.ok) {
           setAuth("signed-in");
-          await Promise.all([loadConsultations(), loadDiagnoses()]);
+          await Promise.all([loadConsultations(), loadDiagnoses(), loadConsents()]);
         } else {
           setAuth("signed-out");
         }
@@ -136,7 +165,7 @@ export function AdminDashboard() {
     }
     void checkSession();
     return () => { cancelled = true; };
-  }, [loadConsultations, loadDiagnoses]);
+  }, [loadConsultations, loadConsents, loadDiagnoses]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ko-KR");
@@ -162,6 +191,10 @@ export function AdminDashboard() {
     diagnoses.flatMap((diagnosis) => diagnosis.consultation_id ? [[diagnosis.consultation_id, diagnosis] as const] : []),
   ), [diagnoses]);
 
+  const consentByConsultation = useMemo(() => new Map(
+    consents.map((consent) => [consent.consultation_id, consent] as const),
+  ), [consents]);
+
   async function login(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoginBusy(true);
@@ -176,7 +209,7 @@ export function AdminDashboard() {
       if (!response.ok) throw new Error(result.error || "로그인하지 못했습니다.");
       setPassword("");
       setAuth("signed-in");
-      await Promise.all([loadConsultations(), loadDiagnoses()]);
+      await Promise.all([loadConsultations(), loadDiagnoses(), loadConsents()]);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "로그인하지 못했습니다.");
     } finally {
@@ -188,8 +221,11 @@ export function AdminDashboard() {
     await fetch("/api/admin/logout", { method: "POST" });
     setRecords([]);
     setDiagnoses([]);
+    setConsents([]);
     setSelected(null);
     setDiagnosisEditor(null);
+    setRegistrationRecord(null);
+    setConsentViewer(null);
     setAuth("signed-out");
   }
 
@@ -231,6 +267,11 @@ export function AdminDashboard() {
   }
 
   async function updateStatus(record: ConsultationRecord, status: ConsultationStatus) {
+    if (status === "등록" && !consentByConsultation.has(record.id)) {
+      setSelected(null);
+      setRegistrationRecord(record);
+      return;
+    }
     if (record.status === status || updatingId) return;
     setUpdatingId(record.id);
     setLoadError("");
@@ -249,6 +290,17 @@ export function AdminDashboard() {
     } finally {
       setUpdatingId("");
     }
+  }
+
+  function completeRegistration(consent: ConsentRecord) {
+    setConsents((current) => current.some((item) => item.id === consent.id)
+      ? current.map((item) => item.id === consent.id ? consent : item)
+      : [consent, ...current]);
+    setRecords((current) => current.map((item) => item.id === consent.consultation_id ? { ...item, status: "등록" } : item));
+    setSelected((current) => current?.id === consent.consultation_id ? { ...current, status: "등록" } : current);
+    setRegistrationRecord(null);
+    const consultation = records.find((item) => item.id === consent.consultation_id);
+    if (consultation) setConsentViewer({ consentId: consent.id, consultation: { ...consultation, status: "등록" } });
   }
 
   if (auth === "checking") {
@@ -283,7 +335,7 @@ export function AdminDashboard() {
     <main className="min-h-dvh bg-[#f4f2ee]">
       <header className="sticky top-0 z-20 bg-[#2b2723] px-5 py-4 text-white shadow-sm">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 sm:gap-4">
-          <div><h1 className="text-base font-extrabold sm:text-lg">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">상담 {records.length}건 · 보컬 진단서 {diagnoses.length}건</p></div>
+          <div><h1 className="text-base font-extrabold sm:text-lg">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">상담 {records.length}건 · 등록 동의서 {consents.length}건 · 보컬 진단서 {diagnoses.length}건</p></div>
           <div className="flex flex-wrap gap-2">
             <Link href="/consult" className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link>
             <button type="button" onClick={() => setDiagnosisEditor({ diagnosis: null, consultation: null })} className="min-h-12 rounded-xl bg-violet-100 px-3.5 text-sm font-extrabold text-violet-900">새 진단서</button>
@@ -312,7 +364,7 @@ export function AdminDashboard() {
                 ))}
               </div>
             ) : null}
-            <button type="button" onClick={() => void Promise.all([loadConsultations(), loadDiagnoses()])} disabled={loading || diagnosesLoading} className="min-h-12 rounded-xl bg-[#e8a23d] px-4 text-sm font-extrabold text-[#2b2723] disabled:opacity-60">{loading || diagnosesLoading ? "불러오는 중…" : "새로고침"}</button>
+            <button type="button" onClick={() => void Promise.all([loadConsultations(), loadDiagnoses(), loadConsents()])} disabled={loading || diagnosesLoading || consentsLoading} className="min-h-12 rounded-xl bg-[#e8a23d] px-4 text-sm font-extrabold text-[#2b2723] disabled:opacity-60">{loading || diagnosesLoading || consentsLoading ? "불러오는 중…" : "새로고침"}</button>
           </div>
         </section>
 
@@ -341,8 +393,11 @@ export function AdminDashboard() {
                       {diagnosisBusyId === record.id ? "여는 중…" : diagnosisByConsultation.has(record.id) ? "진단서 보기" : "진단서 작성"}
                     </button>
                   ) : null}
+                  {consentByConsultation.has(record.id) ? (
+                    <button type="button" onClick={() => setConsentViewer({ consentId: consentByConsultation.get(record.id)!.id, consultation: record })} className="min-h-12 rounded-xl bg-emerald-100 px-4 text-sm font-extrabold text-emerald-900">동의서 보기</button>
+                  ) : null}
                   <button type="button" onClick={() => setSelected(record)} className="min-h-12 rounded-xl bg-[#eee9e0] px-4 text-sm font-bold text-[#4a453d]">상세 보기</button>
-                  <button type="button" disabled={updatingId === record.id} onClick={() => void updateStatus(record, record.status === "상담" ? "등록" : "상담")} className={`min-h-12 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50 ${record.status === "상담" ? "bg-[#e8a23d] text-[#2b2723]" : "bg-[#2b2723] text-white"}`}>{record.status === "상담" ? "등록으로 변경" : "상담으로 변경"}</button>
+                  <button type="button" disabled={updatingId === record.id} onClick={() => void updateStatus(record, record.status === "상담" || !consentByConsultation.has(record.id) ? "등록" : "상담")} className={`min-h-12 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50 ${record.status === "상담" || !consentByConsultation.has(record.id) ? "bg-[#e8a23d] text-[#2b2723]" : "bg-[#2b2723] text-white"}`}>{record.status === "상담" ? "등록으로 변경" : consentByConsultation.has(record.id) ? "상담으로 변경" : "동의서 받기"}</button>
                 </div>
               </div>
             </article>
@@ -377,9 +432,11 @@ export function AdminDashboard() {
         )}
       </div>
 
-      {selected ? <ConsultationDetail record={selected} diagnosis={diagnosisByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onStatus={(status) => void updateStatus(selected, status)} /> : null}
+      {selected ? <ConsultationDetail record={selected} diagnosis={diagnosisByConsultation.get(selected.id)} consent={consentByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onConsent={() => { const consent = consentByConsultation.get(selected.id); if (consent) setConsentViewer({ consentId: consent.id, consultation: selected }); }} onStatus={(status) => void updateStatus(selected, status)} /> : null}
       {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} /> : null}
       {diagnosisEditor ? <VocalDiagnosisEditor initialDiagnosis={diagnosisEditor.diagnosis} consultation={diagnosisEditor.consultation} onClose={() => setDiagnosisEditor(null)} onSaved={upsertDiagnosis} /> : null}
+      {registrationRecord ? <RegistrationConsentFlow consultation={registrationRecord} onClose={() => setRegistrationRecord(null)} onComplete={completeRegistration} /> : null}
+      {consentViewer ? <ConsentDetailModal consentId={consentViewer.consentId} consultation={consentViewer.consultation} onClose={() => setConsentViewer(null)} /> : null}
     </main>
   );
 }
@@ -387,18 +444,22 @@ export function AdminDashboard() {
 function ConsultationDetail({
   record,
   diagnosis,
+  consent,
   diagnosisBusy,
   busy,
   onClose,
   onDiagnosis,
+  onConsent,
   onStatus,
 }: {
   record: ConsultationRecord;
   diagnosis?: VocalDiagnosisRecord;
+  consent?: ConsentRecord;
   diagnosisBusy: boolean;
   busy: boolean;
   onClose: () => void;
   onDiagnosis: () => void;
+  onConsent: () => void;
   onStatus: (status: ConsultationStatus) => void;
 }) {
   useEffect(() => {
@@ -470,9 +531,12 @@ function ConsultationDetail({
               {diagnosisBusy ? "진단서 여는 중…" : diagnosis ? "보컬 진단서 보기·수정" : "보컬 진단서 작성"}
             </button>
           ) : null}
+          {consent ? (
+            <button type="button" onClick={onConsent} className="mb-4 min-h-14 w-full rounded-[14px] bg-emerald-100 px-5 text-base font-extrabold text-emerald-900">등록 동의서 보기 · 인쇄</button>
+          ) : null}
           <div className="mb-6 flex gap-2 rounded-[14px] bg-[#f7f4ee] p-2">
             <button type="button" disabled={busy} onClick={() => onStatus("상담")} className={`min-h-12 flex-1 rounded-xl text-sm font-extrabold ${record.status === "상담" ? "bg-white text-amber-800 shadow-sm" : "text-[#6b6459]"}`}>상담만 함</button>
-            <button type="button" disabled={busy} onClick={() => onStatus("등록")} className={`min-h-12 flex-1 rounded-xl text-sm font-extrabold ${record.status === "등록" ? "bg-[#2b2723] text-white shadow-sm" : "text-[#6b6459]"}`}>등록함</button>
+            <button type="button" disabled={busy} onClick={() => onStatus("등록")} className={`min-h-12 flex-1 rounded-xl text-sm font-extrabold ${record.status === "등록" ? "bg-[#2b2723] text-white shadow-sm" : "text-[#6b6459]"}`}>{record.status === "등록" && !consent ? "동의서 받기" : "등록함"}</button>
           </div>
           <dl className="grid grid-cols-[105px_1fr] gap-x-4 gap-y-3 text-[0.95rem] sm:grid-cols-[128px_1fr]">
             {rows.map(([label, value]) => value ? <div key={label} className="contents"><dt className="font-bold text-[#6b6459]">{label}</dt><dd className="whitespace-pre-line break-words leading-relaxed">{value}</dd></div> : null)}
