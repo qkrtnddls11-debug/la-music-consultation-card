@@ -1,5 +1,5 @@
 import { ACADEMY_RULE_SECTIONS, PRIVACY_RETENTION_ITEMS, REFUND_TABLE, RULE_DOCUMENT_DATE } from "@/lib/consent-documents";
-import type { ConsultationRecord } from "@/lib/types";
+import type { ConsentConsultation } from "@/lib/types";
 
 export function AcademyRulesContent() {
   return (
@@ -36,7 +36,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   return <div className="grid grid-cols-[105px_1fr] gap-3 border-b border-[#e4ded4] py-2.5"><dt className="font-bold text-[#6b6459]">{label}</dt><dd className="break-words font-semibold">{value || "미입력"}</dd></div>;
 }
 
-export function PrivacyTermsContent({ consultation }: { consultation?: ConsultationRecord }) {
+export function PrivacyTermsContent({ consultation }: { consultation?: ConsentConsultation }) {
   return (
     <article className="space-y-6 text-[0.94rem] leading-7 text-[#3f3a33]">
       <div className="text-center"><h3 className="text-2xl font-black tracking-tight text-[#1f1c18]">개인정보 수집·활용 동의서</h3></div>

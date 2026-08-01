@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type CopyState = "idle" | "link" | "message" | "error";
 
 export function buildConsultationMessage(link: string) {
-  return `원활한 상담 진행을 위해 아래 링크에서 상담 카드를 작성해 주시면 감사하겠습니다^^
+  return `원활한 상담 진행을 위해 아래 링크에서 상담 예약 정보를 작성해 주시면 감사하겠습니다^^
 
 ${link}
 
@@ -34,8 +34,8 @@ async function writeClipboard(text: string) {
 export function ConsultationLinkDialog({ onClose }: { onClose: () => void }) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
   const link = typeof window === "undefined"
-    ? "/consult?src=link"
-    : `${window.location.origin}/consult?src=link`;
+    ? "/reserve?src=link"
+    : `${window.location.origin}/reserve?src=link`;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

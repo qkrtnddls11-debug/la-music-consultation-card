@@ -36,6 +36,8 @@ export const TIME_SLOTS = ["오전 11~1시", "오후 1~4시", "오후 4~7시", "
 export type CardType = "일반" | "입시";
 export type ConsultationStatus = "상담" | "등록";
 export type SubmissionSource = "tablet" | "link";
+export type ReservationSource = "link" | "tablet" | "crm";
+export type ReservationStatus = "대기" | "확정" | "상담완료";
 export type ConsentChoice = "동의함" | "동의하지 않음";
 export type SignerRole = "본인" | "법정대리인";
 export const DIAGNOSIS_LEVELS = ["상", "중상", "중", "중하", "하"] as const;
@@ -53,7 +55,32 @@ export type SchedulePreference = {
   timeSlot: string;
 };
 
+export type ReservationSchedulePreference = {
+  rank: 1 | 2 | 3;
+  day: string;
+  timeText: string;
+};
+
+export type ReservationInput = {
+  name: string;
+  phone: string;
+  gender: string;
+  birth_date: string;
+  subjects: string[];
+  lesson_type: "입시" | "취미" | "";
+  schedule_preferences: ReservationSchedulePreference[];
+  source: ReservationSource;
+};
+
+export type ReservationRecord = ReservationInput & {
+  id: string;
+  created_at: string;
+  status: ReservationStatus;
+  confirmed_at: string | null;
+};
+
 export type ConsultationInput = {
+  reservation_id: string | null;
   card_type: CardType;
   submission_source: SubmissionSource;
   name: string;
@@ -81,6 +108,7 @@ export type ConsultationInput = {
   schedule_preferences: SchedulePreference[];
   start_available: string;
   etc_memo: string;
+  admin_memo: string;
 };
 
 export type ConsultationRecord = ConsultationInput & {
@@ -154,6 +182,20 @@ export type ConsentSubmission = {
   signature_image: string;
 };
 
+export type ConsentConsultation = Pick<
+  ConsultationRecord,
+  "id" | "name" | "birth_date" | "student_phone" | "parent_phone" | "school" | "gender"
+>;
+
+export type ConsentRequestRecord = {
+  id: string;
+  created_at: string;
+  consultation_id: string;
+  expires_at: string;
+  completed_at: string | null;
+  revoked_at: string | null;
+};
+
 export const EMPTY_SCHEDULE: SchedulePreference[] = [
   { rank: 1, days: [], timeSlot: "" },
   { rank: 2, days: [], timeSlot: "" },
@@ -161,6 +203,7 @@ export const EMPTY_SCHEDULE: SchedulePreference[] = [
 ];
 
 export const EMPTY_CONSULTATION: ConsultationInput = {
+  reservation_id: null,
   card_type: "일반",
   submission_source: "tablet",
   name: "",
@@ -188,7 +231,14 @@ export const EMPTY_CONSULTATION: ConsultationInput = {
   schedule_preferences: EMPTY_SCHEDULE,
   start_available: "",
   etc_memo: "",
+  admin_memo: "",
 };
+
+export const EMPTY_RESERVATION_SCHEDULE: ReservationSchedulePreference[] = [
+  { rank: 1, day: "", timeText: "" },
+  { rank: 2, day: "", timeText: "" },
+  { rank: 3, day: "", timeText: "" },
+];
 
 export const EMPTY_VOCAL_DIAGNOSIS: VocalDiagnosisInput = {
   consultation_id: null,

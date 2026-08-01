@@ -7,11 +7,11 @@ export const metadata: Metadata = {
 };
 
 type ConsultationPageProps = {
-  searchParams: Promise<{ src?: string | string[] }>;
+  searchParams: Promise<{ src?: string | string[]; reservation_id?: string | string[] }>;
 };
 
 export default async function ConsultationPage({ searchParams }: ConsultationPageProps) {
-  const { src } = await searchParams;
+  const { src, reservation_id: reservationId } = await searchParams;
   const submissionSource: SubmissionSource = src === "link" ? "link" : "tablet";
-  return <ConsultationWizard submissionSource={submissionSource} />;
+  return <ConsultationWizard submissionSource={submissionSource} reservationId={typeof reservationId === "string" ? reservationId : undefined} />;
 }

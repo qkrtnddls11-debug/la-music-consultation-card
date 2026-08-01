@@ -12,13 +12,15 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const body = (await request.json()) as { status?: ConsultationStatus };
-    if (body.status !== "상담" && body.status !== "등록") {
+    const body = (await request.json()) as { status?: ConsultationStatus; admin_memo?: string };
+    const hasStatus = body.status === "상담" || body.status === "등록";
+    const hasMemo = typeof body.admin_memo === "string";
+    if (!hasStatus && !hasMemo) {
       return Response.json({ error: "상태값이 올바르지 않습니다." }, { status: 400 });
     }
 
     const supabase = createAdminSupabase();
-    if (body.status === "등록") {
+    if (hasStatus && body.status === "등록") {
       const { data: consent, error: consentError } = await supabase
         .from("consents")
         .select("id")
@@ -32,9 +34,12 @@ export async function PATCH(
       }
     }
 
+    const updates: { status?: ConsultationStatus; admin_memo?: string } = {};
+    if (hasStatus) updates.status = body.status;
+    if (hasMemo) updates.admin_memo = body.admin_memo!.trim().slice(0, 4000);
     const { error } = await supabase
       .from("consultations")
-      .update({ status: body.status })
+      .update(updates)
       .eq("id", id);
 
     if (error) {

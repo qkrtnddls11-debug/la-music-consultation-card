@@ -6,9 +6,34 @@ create extension if not exists pgcrypto;
 create type public.consultation_card_type as enum ('일반', '입시');
 create type public.consultation_status as enum ('상담', '등록');
 
+create table public.reservations (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  name text not null check (char_length(name) between 1 and 80),
+  phone text not null default '',
+  gender text not null check (gender in ('남', '여')),
+  birth_date date not null,
+  subjects text[] not null default '{}',
+  lesson_type text not null check (lesson_type in ('입시', '취미')),
+  schedule_preferences jsonb not null default '[]'::jsonb check (jsonb_typeof(schedule_preferences) = 'array'),
+  status text not null default '대기' check (status in ('대기', '확정', '상담완료')),
+  confirmed_at timestamptz,
+  source text not null default 'link' check (source in ('link', 'tablet', 'crm'))
+);
+
+create index reservations_created_at_idx on public.reservations (created_at desc);
+create index reservations_status_idx on public.reservations (status);
+create index reservations_confirmed_at_idx on public.reservations (confirmed_at);
+alter table public.reservations enable row level security;
+revoke all on table public.reservations from anon, authenticated;
+grant insert (name, phone, gender, birth_date, subjects, lesson_type, schedule_preferences, source) on table public.reservations to anon;
+grant all on table public.reservations to service_role;
+create policy "anonymous can insert reservations" on public.reservations for insert to anon with check (status = '대기' and confirmed_at is null);
+
 create table public.consultations (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
+  reservation_id uuid unique references public.reservations(id) on delete set null,
   card_type public.consultation_card_type not null,
   submission_source text not null default 'tablet' check (submission_source in ('tablet', 'link')),
   name text not null check (char_length(name) between 1 and 80),
@@ -38,6 +63,7 @@ create table public.consultations (
   schedule_preferences jsonb not null default '[]'::jsonb,
   start_available text not null default '',
   etc_memo text not null default '',
+  admin_memo text not null default '',
   status public.consultation_status not null default '상담',
 
   constraint lesson_experience_is_object check (jsonb_typeof(lesson_experience) = 'object'),
@@ -64,7 +90,7 @@ grant insert (
   vocal_difficulties, instrument_difficulties, has_instrument, purpose, school, school_status,
   region, gender, ipsi_type, ipsi_period, target_school, consult_content,
   genre_song, question, lesson_experience, referral_source, referral_name,
-  schedule_preferences, start_available, etc_memo
+  schedule_preferences, start_available, etc_memo, admin_memo
 ) on table public.consultations to anon;
 
 create policy "anonymous tablets can insert consultations"
@@ -156,6 +182,24 @@ create table public.consents (
     (not is_minor and signer_role = '본인' and guardian_name = '' and guardian_phone = '' and guardian_relationship = '')
   )
 );
+
+create table public.consent_requests (
+  id uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  consultation_id uuid not null references public.consultations(id) on delete cascade,
+  token_hash text not null unique check (char_length(token_hash) = 64),
+  expires_at timestamptz not null,
+  completed_at timestamptz,
+  revoked_at timestamptz
+);
+
+create index consent_requests_consultation_idx on public.consent_requests (consultation_id, created_at desc);
+create index consent_requests_expires_at_idx on public.consent_requests (expires_at);
+alter table public.consent_requests enable row level security;
+revoke all on table public.consent_requests from anon, authenticated;
+grant all on table public.consent_requests to service_role;
+
+alter table public.consents add column consent_request_id uuid unique references public.consent_requests(id) on delete set null;
 
 create index consents_created_at_idx on public.consents (created_at desc);
 

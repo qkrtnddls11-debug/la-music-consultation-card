@@ -76,6 +76,7 @@ export function normalizeConsultation(
   }
 
   const data: ConsultationInput = {
+    reservation_id: clean(source.reservation_id, 40) || null,
     card_type: cardType,
     submission_source: source.submission_source === "link" ? "link" : "tablet",
     name,
@@ -106,6 +107,7 @@ export function normalizeConsultation(
     schedule_preferences: cleanSchedule(source.schedule_preferences),
     start_available: clean(source.start_available, 300),
     etc_memo: clean(source.etc_memo, MAX_LONG),
+    admin_memo: clean(source.admin_memo, MAX_LONG),
   };
 
   return { data };

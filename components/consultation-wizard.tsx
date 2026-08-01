@@ -13,6 +13,7 @@ import {
   TIME_SLOTS,
   VOCAL_DIFFICULTIES,
   type ConsultationInput,
+  type ReservationRecord,
   type SchedulePreference,
   type SubmissionSource,
 } from "@/lib/types";
@@ -161,6 +162,21 @@ function detailSubjects(subjects: string[], details: SubjectDetails) {
   });
 }
 
+function splitDetailedSubjects(values: string[]) {
+  const subjects: string[] = [];
+  const details: SubjectDetails = { 기타: [], 피아노: [], 트럼펫: [], 플루트: [] };
+  for (const value of values) {
+    const match = /^(기타|피아노|트럼펫|플루트)\((.+)\)$/.exec(value);
+    if (match) {
+      subjects.push(match[1]);
+      details[match[1] as SubjectDetailKey] = match[2].split(",").map((item) => item.trim()).filter(Boolean);
+    } else {
+      subjects.push(value);
+    }
+  }
+  return { subjects, details };
+}
+
 function Chip({
   children,
   selected,
@@ -230,7 +246,7 @@ function SubBlock({ children }: { children: React.ReactNode }) {
   return <div className="mt-[18px] rounded-[14px] bg-[#f7f4ee] p-4">{children}</div>;
 }
 
-export function ConsultationWizard({ submissionSource }: { submissionSource: SubmissionSource }) {
+export function ConsultationWizard({ submissionSource, reservationId }: { submissionSource: SubmissionSource; reservationId?: string }) {
   const [draft, setDraft] = useState<ConsultationInput>(() => createEmptyDraft(submissionSource));
   const [details, setDetails] = useState<SubjectDetails>({ ...EMPTY_DETAILS });
   const [birth, setBirth] = useState({ year: "", month: "", day: "" });
@@ -242,6 +258,9 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [prefillLoading, setPrefillLoading] = useState(Boolean(reservationId));
+  const [prefillError, setPrefillError] = useState("");
+  const [showAdminMemo, setShowAdminMemo] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const nextRef = useRef<() => void>(() => undefined);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -258,6 +277,50 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
   }, []);
 
   useEffect(() => {
+    if (!reservationId) return;
+    let cancelled = false;
+    async function loadReservation() {
+      try {
+        const response = await fetch(`/api/admin/reservations/${reservationId}`, { cache: "no-store" });
+        const result = await response.json() as ReservationRecord | { error?: string };
+        if (!response.ok || !("id" in result)) throw new Error("error" in result && result.error ? result.error : "예약 정보를 불러오지 못했습니다.");
+        if (cancelled) return;
+        const parsed = splitDetailedSubjects(result.subjects);
+        const purpose = result.lesson_type === "입시" ? "프로·입시" : "여가·자기계발";
+        const merged: ConsultationInput = {
+          ...createEmptyDraft("tablet"),
+          reservation_id: result.id,
+          name: result.name,
+          birth_date: result.birth_date,
+          student_phone: result.phone,
+          gender: result.gender,
+          subjects: parsed.subjects,
+          purpose,
+          card_type: result.lesson_type === "입시" ? "입시" : "일반",
+        };
+        setDetails(parsed.details);
+        const [year = "", month = "", day = ""] = result.birth_date.split("-");
+        setBirth({ year, month: String(Number(month)), day: String(Number(day)) });
+        setDraft(merged);
+        const nextStep = parsed.subjects.includes("보컬")
+          ? "vocal"
+          : parsed.subjects.some(isDifficultyInstrument)
+            ? "instrument-difficulties"
+            : parsed.subjects.some((subject) => INSTRUMENTS.includes(subject))
+              ? "instrument"
+              : result.lesson_type === "입시" ? "ipsi-info" : "experience";
+        setCurrent(nextStep);
+      } catch (error) {
+        if (!cancelled) setPrefillError(error instanceof Error ? error.message : "예약 정보를 불러오지 못했습니다.");
+      } finally {
+        if (!cancelled) setPrefillLoading(false);
+      }
+    }
+    void loadReservation();
+    return () => { cancelled = true; };
+  }, [reservationId]);
+
+  useEffect(() => {
     return () => {
       if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
     };
@@ -270,6 +333,10 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
   useEffect(() => {
     if (!submitted) return;
     const timer = window.setTimeout(() => {
+      if (reservationId) {
+        window.location.assign("/admin?tab=reservations");
+        return;
+      }
       setDraft(createEmptyDraft(submissionSource));
       setDetails({ 기타: [], 피아노: [], 트럼펫: [], 플루트: [] });
       setBirth({ year: "", month: "", day: "" });
@@ -280,7 +347,7 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
       setSubmitted(false);
     }, 3000);
     return () => window.clearTimeout(timer);
-  }, [submissionSource, submitted]);
+  }, [reservationId, submissionSource, submitted]);
 
   const years = useMemo(() => {
     if (!today) return [];
@@ -335,7 +402,10 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
     setWarning("");
     const activeFlow = buildFlow(draft);
     const index = activeFlow.indexOf(current);
-    if (index >= 0 && index < activeFlow.length - 1) setCurrent(activeFlow[index + 1]);
+    if (index >= 0 && index < activeFlow.length - 1) {
+      const nextStep = activeFlow[index + 1];
+      setCurrent(reservationId && nextStep === "purpose" ? activeFlow[index + 2] : nextStep);
+    }
   }
   useEffect(() => {
     nextRef.current = goNext;
@@ -436,9 +506,13 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
     );
   }
 
+  if (prefillLoading || prefillError) {
+    return <main className="flex min-h-dvh items-center justify-center bg-[#f4f2ee] p-5"><section className="w-full max-w-md rounded-[20px] bg-white p-7 text-center shadow-sm"><h1 className="text-xl font-black">{prefillLoading ? "예약 정보를 불러오고 있어요…" : "예약 연결을 확인해 주세요"}</h1>{prefillError ? <><p className="mt-3 text-sm font-semibold text-red-700">{prefillError}</p><a href="/admin?tab=reservations" className="mt-5 inline-flex min-h-12 items-center rounded-xl bg-[#2b2723] px-5 font-bold text-white">예약 목록으로 돌아가기</a></> : null}</section></main>;
+  }
+
   return (
     <main className="flex min-h-dvh max-h-dvh flex-col overflow-hidden bg-[#f4f2ee]">
-      <TopBar isIpsi={isIpsi && stepIndex >= flow.indexOf("purpose")} label={submissionSource === "link" ? "온라인 작성" : "현장 작성"} />
+      <TopBar isIpsi={isIpsi && stepIndex >= flow.indexOf("purpose")} label={reservationId ? "예약 연결 상담" : submissionSource === "link" ? "온라인 작성" : "현장 작성"} />
       <div className="shrink-0 bg-[#2b2723] px-4 pb-3 sm:px-[22px]">
         <div className="mb-1.5 flex justify-between text-[0.78rem] text-[#b5aea3]">
           <span>{STEP_LABELS[current]}</span>
@@ -700,6 +774,10 @@ export function ConsultationWizard({ submissionSource }: { submissionSource: Sub
                 value ? <div className="contents" key={label}><dt className="font-bold text-[#6b6459]">{label}</dt><dd className="whitespace-pre-line break-words leading-[1.45]">{value}</dd></div> : null
               ))}
             </dl>
+            <div className="mt-6 border-t border-[#eee9e0] pt-5">
+              <button type="button" onClick={() => setShowAdminMemo((value) => !value)} className="min-h-12 rounded-xl bg-[#eee9e0] px-4 text-sm font-extrabold text-[#4a453d]">{showAdminMemo ? "관리자 메모 닫기" : "관리자 메모"}</button>
+              {showAdminMemo ? <div className="mt-3 rounded-[14px] bg-[#2b2723] p-4"><label htmlFor="admin-memo" className="mb-2 block text-sm font-extrabold text-white">상담 중 관리자 기록</label><textarea id="admin-memo" className={`${inputClass} min-h-[160px] resize-y bg-white leading-relaxed`} value={draft.admin_memo} onChange={(event) => patchDraft("admin_memo", event.target.value)} placeholder="학생에게 보여주지 않을 상담 메모를 입력하세요" /></div> : null}
+            </div>
           </>
         );
       }

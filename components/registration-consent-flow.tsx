@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AcademyRulesContent, PrivacyTermsContent } from "@/components/consent-document-content";
 import { SignaturePad, type SignaturePadHandle } from "@/components/signature-pad";
 import { isUnder19 } from "@/lib/consent-utils";
-import type { ConsentChoice, ConsentRecord, ConsultationRecord } from "@/lib/types";
+import type { ConsentChoice, ConsentConsultation, ConsentRecord } from "@/lib/types";
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -26,10 +26,12 @@ function ChoiceButtons({ value, onChange, label }: { value: ConsentChoice | ""; 
   );
 }
 
-export function RegistrationConsentFlow({ consultation, onClose, onComplete }: {
-  consultation: ConsultationRecord;
+export function RegistrationConsentFlow({ consultation, onClose, onComplete, submitUrl = "/api/admin/consents", publicLink = false }: {
+  consultation: ConsentConsultation;
   onClose: () => void;
   onComplete: (consent: ConsentRecord) => void;
+  submitUrl?: string;
+  publicLink?: boolean;
 }) {
   const [step, setStep] = useState<Step>(1);
   const [rulesRead, setRulesRead] = useState(false);
@@ -78,7 +80,7 @@ export function RegistrationConsentFlow({ consultation, onClose, onComplete }: {
     setSaving(true);
     setError("");
     try {
-      const response = await fetch("/api/admin/consents", {
+      const response = await fetch(submitUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -112,7 +114,7 @@ export function RegistrationConsentFlow({ consultation, onClose, onComplete }: {
     <div className="fixed inset-0 z-[70] overflow-y-auto bg-[#f4f2ee]" role="dialog" aria-modal="true" aria-labelledby="consent-flow-title">
       <header className="sticky top-0 z-10 border-b border-[#ded8cf] bg-white/95 px-4 py-3 backdrop-blur sm:px-6">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <button type="button" onClick={onClose} className="min-h-12 shrink-0 rounded-xl bg-[#eee9e0] px-4 text-sm font-bold">나가기</button>
+          <button type="button" onClick={onClose} className="min-h-12 shrink-0 rounded-xl bg-[#eee9e0] px-4 text-sm font-bold">{publicLink ? "닫기" : "나가기"}</button>
           <div className="min-w-0 flex-1">
             <h1 id="consent-flow-title" className="truncate text-lg font-black sm:text-xl">{consultation.name} · 등록 동의서</h1>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#e5dfd6]"><div className="h-full rounded-full bg-[#e8a23d] transition-[width]" style={{ width: `${step * 25}%` }} /></div>
@@ -168,7 +170,7 @@ export function RegistrationConsentFlow({ consultation, onClose, onComplete }: {
             <div className="space-y-6 rounded-[22px] bg-white p-5 shadow-sm sm:p-7">
               <SignaturePad ref={traceRef} label="1. 흐린 이름 위에 따라 쓰기" guideText={signerName} onInkChange={setTraceInk} />
               <SignaturePad ref={signatureRef} label="2. 자유 서명(사인)" onInkChange={setSignatureInk} />
-              <p className="rounded-xl bg-[#f3eee5] p-4 text-sm font-semibold leading-6 text-[#4a453d]">‘동의 완료’를 누르면 위 전자서명과 선택한 동의 내역이 저장되고 상담 상태가 ‘등록’으로 변경됩니다.</p>
+              <p className="rounded-xl bg-[#f3eee5] p-4 text-sm font-semibold leading-6 text-[#4a453d]">‘동의 완료’를 누르면 위 전자서명과 선택한 동의 내역이 저장되고 상담 상태가 ‘등록’으로 변경됩니다. 이 서명 링크는 즉시 만료됩니다.</p>
             </div>
           </section>
         ) : null}
