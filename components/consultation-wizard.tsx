@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { birthDateFromInput, birthInputFromDate, formatBirthInput } from "@/lib/birth-date";
+import { BirthDateFields } from "@/components/birth-date-fields";
+import { birthDateFromParts, birthPartsFromDate, EMPTY_BIRTH_DATE } from "@/lib/birth-date";
 import {
   COMMON_INSTRUMENT_DIFFICULTIES,
   DAYS,
@@ -245,7 +246,7 @@ function SubBlock({ children }: { children: React.ReactNode }) {
 export function ConsultationWizard({ submissionSource, reservationId }: { submissionSource: SubmissionSource; reservationId?: string }) {
   const [draft, setDraft] = useState<ConsultationInput>(() => createEmptyDraft(submissionSource));
   const [details, setDetails] = useState<SubjectDetails>({ ...EMPTY_DETAILS });
-  const [birthInput, setBirthInput] = useState("");
+  const [birth, setBirth] = useState(() => ({ ...EMPTY_BIRTH_DATE }));
   const [targetKnown, setTargetKnown] = useState<boolean | null>(null);
   const [genreKnown, setGenreKnown] = useState<boolean | null>(null);
   const [current, setCurrent] = useState<StepId>("name");
@@ -264,7 +265,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
   const flow = useMemo(() => buildFlow(draft), [draft]);
   const stepIndex = Math.max(0, flow.indexOf(current));
   const isIpsi = draft.purpose === "프로·입시";
-  const chosenBirthDate = today ? birthDateFromInput(birthInput, today) || null : null;
+  const chosenBirthDate = today ? birthDateFromParts(birth, today) || null : null;
   const age = getAge(chosenBirthDate, today);
 
   useEffect(() => {
@@ -295,7 +296,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
           card_type: result.lesson_type === "입시" ? "입시" : "일반",
         };
         setDetails(parsed.details);
-        setBirthInput(birthInputFromDate(result.birth_date));
+        setBirth(birthPartsFromDate(result.birth_date));
         setDraft(merged);
         const nextStep = parsed.subjects.includes("보컬")
           ? "vocal"
@@ -334,7 +335,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
       }
       setDraft(createEmptyDraft(submissionSource));
       setDetails({ 기타: [], 피아노: [], 트럼펫: [], 플루트: [] });
-      setBirthInput("");
+      setBirth({ ...EMPTY_BIRTH_DATE });
       setTargetKnown(null);
       setGenreKnown(null);
       setCurrent("name");
@@ -350,8 +351,8 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
 
   function validateStep(step: StepId) {
     if (step === "name" && !draft.name.trim()) return "이름을 입력해 주세요";
-    if (step === "birth" && birthInput && !chosenBirthDate) {
-      return "생년월일 숫자 8자리를 올바르게 입력해 주세요";
+    if (step === "birth" && (birth.year || birth.month || birth.day) && !chosenBirthDate) {
+      return "생년월일의 연도, 월, 일을 올바르게 입력해 주세요";
     }
     if (step === "gender" && !draft.gender) return "성별을 선택해 주세요";
     if (step === "phones" && (!validPhone(draft.student_phone) || !validPhone(draft.parent_phone))) {
@@ -532,9 +533,8 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
       case "birth":
         return (
           <>
-            <QuestionHeading title="생년월일을 입력해 주세요" sub={age === null ? "숫자 8자리만 입력하면 돼요. 예: 20010415" : <><b className="text-[#4a453d]">만 {age}세</b>로 계산되었어요</>} />
-            <label className="sr-only" htmlFor="birth-date-input">생년월일 8자리</label>
-            <input id="birth-date-input" type="text" inputMode="numeric" autoComplete="bday" className={`${inputClass} text-lg font-bold tracking-wide`} value={birthInput} onChange={(event) => setBirthInput(formatBirthInput(event.target.value))} placeholder="예: 2001.04.15" maxLength={10} autoFocus />
+            <QuestionHeading title="생년월일을 알려주세요" sub={age === null ? "연도는 숫자로 입력하고 월·일은 목록에서 골라주세요" : <><b className="text-[#4a453d]">만 {age}세</b>로 계산되었어요</>} />
+            <BirthDateFields value={birth} onChange={setBirth} inputClassName={inputClass} autoFocus />
           </>
         );
       case "gender":

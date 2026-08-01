@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { birthDateFromInput, formatBirthInput } from "@/lib/birth-date";
+import { BirthDateFields } from "@/components/birth-date-fields";
+import { birthDateFromParts, EMPTY_BIRTH_DATE } from "@/lib/birth-date";
 import {
   DAYS,
   EMPTY_RESERVATION_SCHEDULE,
@@ -50,7 +51,7 @@ export function ReservationWizard({ source }: { source: ReservationSource }) {
   const [step, setStep] = useState<Step>("name");
   const [draft, setDraft] = useState<ReservationInput>({ name: "", phone: "", gender: "", birth_date: "", subjects: [], lesson_type: "", schedule_preferences: EMPTY_RESERVATION_SCHEDULE.map((item) => ({ ...item, days: [...item.days] })), schedule_note: "", source });
   const [details, setDetails] = useState<Record<DetailSubject, string[]>>({ ...EMPTY_DETAILS });
-  const [birthInput, setBirthInput] = useState("");
+  const [birth, setBirth] = useState(() => ({ ...EMPTY_BIRTH_DATE }));
   const [today] = useState<Date>(() => new Date());
   const [warning, setWarning] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +60,7 @@ export function ReservationWizard({ source }: { source: ReservationSource }) {
   const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextRef = useRef<() => void>(() => undefined);
   const stepIndex = STEPS.indexOf(step);
-  const chosenBirth = birthDateFromInput(birthInput, today);
+  const chosenBirth = birthDateFromParts(birth, today);
   const age = ageOf(chosenBirth, today);
 
   useEffect(() => () => { if (autoTimer.current) clearTimeout(autoTimer.current); }, []);
@@ -70,7 +71,7 @@ export function ReservationWizard({ source }: { source: ReservationSource }) {
     if (current === "name" && !draft.name.trim()) return "성함을 입력해 주세요";
     if (current === "phone" && ![10, 11].includes(draft.phone.replace(/\D/g, "").length)) return "전화번호를 10~11자리로 입력해 주세요";
     if (current === "gender" && !draft.gender) return "성별을 선택해 주세요";
-    if (current === "birth" && birthInput.replace(/\D/g, "").length !== 8) return "생년월일 숫자 8자리를 입력해 주세요";
+    if (current === "birth" && (!birth.year || !birth.month || !birth.day)) return "생년월일의 연도, 월, 일을 모두 입력해 주세요";
     if (current === "birth" && !chosenBirth) return "올바른 생년월일을 입력해 주세요";
     if (current === "subjects" && draft.subjects.length === 0) return "희망 과목을 하나 이상 선택해 주세요";
     if (current === "lesson" && !draft.lesson_type) return "입시 또는 취미를 선택해 주세요";
@@ -114,7 +115,7 @@ export function ReservationWizard({ source }: { source: ReservationSource }) {
     if (step === "name") return <>{heading("성함을 알려주세요", "예약 확인에 사용할 이름이에요")}<input autoFocus autoComplete="name" aria-label="성함" className={inputClass} value={draft.name} onChange={(event) => patch("name", event.target.value)} placeholder="성함 입력" /></>;
     if (step === "phone") return <>{heading("전화번호를 입력해 주세요", "세부 일정 조율을 위해 연락드릴 수 있어요")}<input autoFocus type="tel" inputMode="numeric" autoComplete="tel" aria-label="전화번호" className={inputClass} value={draft.phone} onChange={(event) => patch("phone", formatPhone(event.target.value))} placeholder="010-0000-0000" maxLength={13} /></>;
     if (step === "gender") return <>{heading("성별을 선택해 주세요", "하나만 선택해 주세요")}<div className="flex flex-wrap gap-2.5">{["남", "여"].map((value) => <Chip key={value} selected={draft.gender === value} onClick={() => { patch("gender", value); scheduleNext(); }}>{value}</Chip>)}</div></>;
-    if (step === "birth") return <>{heading("생년월일을 입력해 주세요", age === null ? "숫자 8자리만 입력하면 돼요. 예: 20010415" : <><strong className="text-[#4a453d]">만 {age}세</strong>로 계산되었어요</>)}<input autoFocus type="text" inputMode="numeric" autoComplete="bday" aria-label="생년월일 8자리" className={`${inputClass} text-lg font-bold tracking-wide`} value={birthInput} onChange={(event) => setBirthInput(formatBirthInput(event.target.value))} placeholder="예: 2001.04.15" maxLength={10} /></>;
+    if (step === "birth") return <>{heading("생년월일을 알려주세요", age === null ? "연도는 숫자로 입력하고 월·일은 목록에서 골라주세요" : <><strong className="text-[#4a453d]">만 {age}세</strong>로 계산되었어요</>)}<BirthDateFields value={birth} onChange={setBirth} inputClassName={inputClass} autoFocus /></>;
     if (step === "subjects") return <>{heading("희망하는 과목을 선택해 주세요", "여러 개 선택할 수 있어요")}<div className="flex flex-wrap gap-2.5">{SUBJECT_OPTIONS.map((subject) => <Chip key={subject} selected={draft.subjects.includes(subject)} onClick={() => selectSubject(subject)}>{subject}</Chip>)}</div>{(["기타", "피아노", "트럼펫", "플루트"] as DetailSubject[]).map((subject) => draft.subjects.includes(subject) ? <div key={subject} className="mt-4 rounded-[14px] bg-[#f7f4ee] p-4"><p className="mb-2.5 font-bold">{subject} 세부 종류</p><div className="flex flex-wrap gap-2">{(subject === "기타" ? GUITAR_DETAILS : STYLE_DETAILS).map((value) => <Chip compact key={value} selected={details[subject].includes(value)} onClick={() => setDetails((current) => ({ ...current, [subject]: toggle(current[subject], value) }))}>{value}</Chip>)}</div></div> : null)}</>;
     if (step === "lesson") return <>{heading("상담 목적을 선택해 주세요", "하나만 선택해 주세요")}<div className="flex flex-wrap gap-2.5">{["입시", "취미"].map((value) => <Chip key={value} selected={draft.lesson_type === value} onClick={() => { patch("lesson_type", value as "입시" | "취미"); scheduleNext(); }}>{value}</Chip>)}</div></>;
     return <>{heading("체험수업 가능한 시간대를 알려주세요", "순위별로 요일과 시간대를 눌러 주세요. 1순위만 작성해도 괜찮아요")}<div className="space-y-5">{draft.schedule_preferences.map((item) => <div key={item.rank} className="rounded-[16px] bg-[#f7f4ee] p-4"><p className="mb-3 font-black text-[#b76e08]">{item.rank}순위</p><div className="flex flex-wrap gap-2">{DAYS.map((day) => <Chip compact key={day} selected={item.days.includes(day)} onClick={() => updateSchedule(item.rank, { days: toggle(item.days, day) })}>{day}</Chip>)}</div><div className="mt-3 flex flex-wrap gap-2">{TIME_SLOTS.map((timeSlot) => <Chip compact key={timeSlot} selected={item.timeSlot === timeSlot} onClick={() => updateSchedule(item.rank, { timeSlot })}>{timeSlot}</Chip>)}</div></div>)}</div><label htmlFor="reservation-schedule-note" className="mt-6 block text-sm font-black text-[#4a453d]">스케줄 참고사항 <span className="font-semibold text-[#9a9389]">(선택)</span></label><textarea id="reservation-schedule-note" aria-label="스케줄 참고사항" className={`${inputClass} mt-2 min-h-[110px] resize-none leading-relaxed`} value={draft.schedule_note} onChange={(event) => patch("schedule_note", event.target.value)} placeholder="예: 평일은 6시 이후 가능, 토요일은 시간 조정 가능" maxLength={500} /></>;

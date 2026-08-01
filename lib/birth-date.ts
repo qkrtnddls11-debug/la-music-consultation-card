@@ -1,9 +1,10 @@
-export function formatBirthInput(value: string) {
-  const digits = value.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 4)}.${digits.slice(4)}`;
-  return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6)}`;
-}
+export type BirthDateParts = {
+  year: string;
+  month: string;
+  day: string;
+};
+
+export const EMPTY_BIRTH_DATE: BirthDateParts = { year: "", month: "", day: "" };
 
 export function birthDateFromInput(value: string, today = new Date()) {
   const digits = value.replace(/\D/g, "");
@@ -20,6 +21,12 @@ export function birthDateFromInput(value: string, today = new Date()) {
   return valid ? `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}` : "";
 }
 
-export function birthInputFromDate(value: string | null) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.replaceAll("-", ".") : "";
+export function birthDateFromParts(value: BirthDateParts, today = new Date()) {
+  return birthDateFromInput(`${value.year}${value.month}${value.day}`, today);
+}
+
+export function birthPartsFromDate(value: string | null): BirthDateParts {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return { ...EMPTY_BIRTH_DATE };
+  const [year, month, day] = value.split("-");
+  return { year, month, day };
 }
