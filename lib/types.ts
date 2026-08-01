@@ -35,6 +35,8 @@ export const TIME_SLOTS = ["오전 11~1시", "오후 1~4시", "오후 4~7시", "
 export type CardType = "일반" | "입시";
 export type ConsultationStatus = "상담" | "등록";
 export type SubmissionSource = "tablet" | "link";
+export const DIAGNOSIS_LEVELS = ["상", "중상", "중", "중하", "하"] as const;
+export type DiagnosisLevel = "" | (typeof DIAGNOSIS_LEVELS)[number];
 
 export type LessonExperience = {
   hasExperience: boolean | null;
@@ -83,6 +85,35 @@ export type ConsultationRecord = ConsultationInput & {
   status: ConsultationStatus;
 };
 
+export type VocalDiagnosisInput = {
+  consultation_id: string | null;
+  student_name: string;
+  confirmation_notes: string;
+  pitch_level: DiagnosisLevel;
+  pitch_memo: string;
+  rhythm_level: DiagnosisLevel;
+  rhythm_memo: string;
+  breath_level: DiagnosisLevel;
+  breath_memo: string;
+  breath_exercise_seconds: number | null;
+  phonation_level: DiagnosisLevel;
+  phonation_memo: string;
+  chest_low_note: string;
+  chest_high_note: string;
+  falsetto_low_note: string;
+  falsetto_high_note: string;
+  performance_level: DiagnosisLevel;
+  performance_memo: string;
+  other_notes: string;
+  lesson_direction: string;
+};
+
+export type VocalDiagnosisRecord = VocalDiagnosisInput & {
+  id: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export const EMPTY_SCHEDULE: SchedulePreference[] = [
   { rank: 1, days: [], timeSlot: "" },
   { rank: 2, days: [], timeSlot: "" },
@@ -116,4 +147,27 @@ export const EMPTY_CONSULTATION: ConsultationInput = {
   schedule_preferences: EMPTY_SCHEDULE,
   start_available: "",
   etc_memo: "",
+};
+
+export const EMPTY_VOCAL_DIAGNOSIS: VocalDiagnosisInput = {
+  consultation_id: null,
+  student_name: "",
+  confirmation_notes: "",
+  pitch_level: "",
+  pitch_memo: "",
+  rhythm_level: "",
+  rhythm_memo: "",
+  breath_level: "",
+  breath_memo: "",
+  breath_exercise_seconds: null,
+  phonation_level: "",
+  phonation_memo: "",
+  chest_low_note: "",
+  chest_high_note: "",
+  falsetto_low_note: "",
+  falsetto_high_note: "",
+  performance_level: "",
+  performance_memo: "",
+  other_notes: "",
+  lesson_direction: "",
 };
