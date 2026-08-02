@@ -4,7 +4,8 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 
 export const ADMIN_COOKIE = "ra_admin_session";
-export const ADMIN_SESSION_SECONDS = 60 * 60 * 8;
+// 기기당 한 번만 로그인하면 다시 묻지 않는다 (10년). 학생 개인정보 보호를 위해 로그인 자체는 유지.
+export const ADMIN_SESSION_SECONDS = 60 * 60 * 24 * 365 * 10;
 
 function required(name: "ADMIN_PASSWORD" | "ADMIN_SESSION_SECRET") {
   const value = process.env[name];
