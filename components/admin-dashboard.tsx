@@ -13,6 +13,7 @@ import type {
   ConsentRequestRecord,
   ConsultationRecord,
   ConsultationStatus,
+  CrmScheduleOptions,
   LessonExperience,
   SchedulePreference,
   ReservationRecord,
@@ -95,7 +96,7 @@ function toTwentyFourHour(period: string, hour: string) {
   return String(normalizedHour).padStart(2, "0");
 }
 
-function ReservationConfirmEditor({ record, busy, onSave }: { record: ReservationRecord; busy: boolean; onSave: (value: string) => void }) {
+function ReservationConfirmEditor({ record, busy, options, onSave }: { record: ReservationRecord; busy: boolean; options: CrmScheduleOptions | null; onSave: (value: string, teacher: string, room: string) => void }) {
   const initial = datetimeLocalValue(record.confirmed_at);
   const [datePart = "", timePart = ""] = initial.split("T");
   const [initialYear = "", initialMonth = "", initialDay = ""] = datePart.split("-");
@@ -107,16 +108,21 @@ function ReservationConfirmEditor({ record, busy, onSave }: { record: Reservatio
   const [period, setPeriod] = useState(initialTwelveHour.period);
   const [hour, setHour] = useState(initialTwelveHour.hour);
   const [minute, setMinute] = useState(initialMinute);
+  const [teacher, setTeacher] = useState(record.trial_teacher || "");
+  const [room, setRoom] = useState(record.trial_room || "");
+  const teacherOptions = Array.from(new Set([...(options?.teachers || []), ...(record.trial_teacher ? [record.trial_teacher] : [])]));
+  const roomOptions = Array.from(new Set([...(options?.rooms || []), ...(record.trial_room ? [record.trial_room] : [])]));
   const twentyFourHour = toTwentyFourHour(period, hour);
   const value = /^\d{4}$/.test(year) && month && day && twentyFourHour && minute ? `${year}-${month}-${day}T${twentyFourHour}:${minute}` : "";
-  const unchanged = value === initial;
+  const unchanged = value === initial && teacher === (record.trial_teacher || "") && room === (record.trial_room || "");
   const selectClass = "min-h-12 min-w-0 rounded-xl border-[1.5px] border-[#d8d2c8] bg-white px-2 text-sm font-bold focus:border-[#e8a23d] focus:outline-none disabled:bg-[#eee9e0]";
   const disabled = busy || record.status === "상담완료";
-  return <div><p className="text-sm font-extrabold text-[#6b6459]">상담 확정 일시</p><div className="mt-1.5"><BirthDateFields value={{ year, month, day }} onChange={(nextValue) => { setYear(nextValue.year); setMonth(nextValue.month); setDay(nextValue.day); }} inputClassName={selectClass} autoComplete={false} disabled={disabled} idPrefix={`reservation-confirm-${record.id}`} labelPrefix="상담 확정" /></div><div className="mt-1.5 grid grid-cols-3 gap-1.5"><select aria-label="확정 오전 또는 오후" value={period} onChange={(event) => setPeriod(event.target.value)} disabled={disabled} className={selectClass}><option value="">오전/오후</option><option value="오전">오전</option><option value="오후">오후</option></select><select aria-label="확정 시" value={hour} onChange={(event) => setHour(event.target.value)} disabled={disabled} className={selectClass}><option value="">시</option>{Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}시</option>)}</select><select aria-label="확정 분" value={minute} onChange={(event) => setMinute(event.target.value)} disabled={disabled} className={selectClass}><option value="">분</option>{["00", "10", "20", "30", "40", "50"].map((item) => <option key={item} value={item}>{item}분</option>)}</select></div><button type="button" disabled={busy || !value || unchanged || record.status === "상담완료"} onClick={() => onSave(value)} className="mt-2 min-h-12 w-full rounded-xl bg-[#e8a23d] px-4 text-sm font-black text-[#2b2723] disabled:bg-[#eee9e0] disabled:text-[#9a9389]">{busy ? "저장 중…" : "확정 일시 저장"}</button>{record.confirmed_at && record.status !== "상담완료" ? <button type="button" disabled={busy} onClick={() => onSave("")} className="mt-1.5 min-h-12 w-full rounded-xl bg-[#eee9e0] text-sm font-bold text-[#6b6459]">확정 취소</button> : null}</div>;
+  return <div><p className="text-sm font-extrabold text-[#6b6459]">상담 확정 일시</p><div className="mt-1.5"><BirthDateFields value={{ year, month, day }} onChange={(nextValue) => { setYear(nextValue.year); setMonth(nextValue.month); setDay(nextValue.day); }} inputClassName={selectClass} autoComplete={false} disabled={disabled} idPrefix={`reservation-confirm-${record.id}`} labelPrefix="상담 확정" /></div><div className="mt-1.5 grid grid-cols-3 gap-1.5"><select aria-label="확정 오전 또는 오후" value={period} onChange={(event) => setPeriod(event.target.value)} disabled={disabled} className={selectClass}><option value="">오전/오후</option><option value="오전">오전</option><option value="오후">오후</option></select><select aria-label="확정 시" value={hour} onChange={(event) => setHour(event.target.value)} disabled={disabled} className={selectClass}><option value="">시</option>{Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}시</option>)}</select><select aria-label="확정 분" value={minute} onChange={(event) => setMinute(event.target.value)} disabled={disabled} className={selectClass}><option value="">분</option>{["00", "10", "20", "30", "40", "50"].map((item) => <option key={item} value={item}>{item}분</option>)}</select></div><div className="mt-1.5 grid grid-cols-2 gap-1.5"><select aria-label="체험 강사" value={teacher} onChange={(event) => setTeacher(event.target.value)} disabled={disabled} className={selectClass}><option value="">강사 선택</option>{teacherOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select><select aria-label="체험 연습실" value={room} onChange={(event) => setRoom(event.target.value)} disabled={disabled} className={selectClass}><option value="">연습실 선택</option>{roomOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>{options && options.teachers.length === 0 ? <p className="mt-1 text-xs font-semibold text-[#9a9389]">강사 목록은 CRM 상담관리 화면을 한 번 열면 채워져요</p> : null}<button type="button" disabled={busy || !value || unchanged || record.status === "상담완료"} onClick={() => onSave(value, teacher, room)} className="mt-2 min-h-12 w-full rounded-xl bg-[#e8a23d] px-4 text-sm font-black text-[#2b2723] disabled:bg-[#eee9e0] disabled:text-[#9a9389]">{busy ? "저장 중…" : "확정 일시 저장"}</button>{record.confirmed_at && record.status !== "상담완료" ? <button type="button" disabled={busy} onClick={() => onSave("", teacher, room)} className="mt-1.5 min-h-12 w-full rounded-xl bg-[#eee9e0] text-sm font-bold text-[#6b6459]">확정 취소</button> : null}</div>;
 }
 
 export function AdminDashboard({ initialView = "consultations" }: { initialView?: AdminView }) {
   const [auth, setAuth] = useState<AuthState>("checking");
+  const [crmOptions, setCrmOptions] = useState<CrmScheduleOptions | null>(null);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
@@ -256,6 +262,20 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
     return () => { cancelled = true; };
   }, [loadConsultations, loadConsentRequests, loadConsents, loadDiagnoses, loadReservations]);
 
+  useEffect(() => {
+    if (auth !== "signed-in") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch("/api/admin/crm-options", { cache: "no-store" });
+        if (!response.ok || cancelled) return;
+        const data = await response.json() as CrmScheduleOptions;
+        if (!cancelled) setCrmOptions({ teachers: data.teachers || [], rooms: data.rooms || [] });
+      } catch { /* 목록이 없으면 선택지 없이 표시 */ }
+    })();
+    return () => { cancelled = true; };
+  }, [auth]);
+
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ko-KR");
     const queryDigits = digits(query);
@@ -341,10 +361,10 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
     setAuth("signed-out");
   }
 
-  async function updateReservationTime(record: ReservationRecord, value: string) {
+  async function updateReservationTime(record: ReservationRecord, value: string, teacher = "", room = "") {
     setUpdatingId(record.id); setLoadError("");
     try {
-      const response = await fetch(`/api/admin/reservations/${record.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed_at: value ? new Date(value).toISOString() : null }) });
+      const response = await fetch(`/api/admin/reservations/${record.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed_at: value ? new Date(value).toISOString() : null, trial_teacher: teacher || null, trial_room: room || null }) });
       const result = await response.json() as ReservationRecord | { error?: string };
       if (!response.ok || !("id" in result)) throw new Error("error" in result && result.error ? result.error : "확정 일시를 저장하지 못했습니다.");
       setReservations((current) => current.map((item) => item.id === result.id ? result : item));
@@ -601,7 +621,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
                     <p className="mt-2 text-xs text-[#9a9389]">접수 {formatCreatedAt(reservation.created_at)}</p>
                   </div>
                   <div className="w-full max-w-sm space-y-3 sm:w-[310px]">
-                    <ReservationConfirmEditor key={reservation.confirmed_at ?? "empty"} record={reservation} busy={updatingId === reservation.id} onSave={(value) => void updateReservationTime(reservation, value)} />
+                    <ReservationConfirmEditor key={`${reservation.confirmed_at ?? "empty"}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`} record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(value, teacher, room) => void updateReservationTime(reservation, value, teacher, room)} />
                     {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button> : <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2b2723] px-4 text-sm font-black text-white">상담 시작 →</Link>}
                     <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button>
                   </div>

@@ -84,6 +84,14 @@ export type ReservationRecord = ReservationInput & {
   created_at: string;
   status: ReservationStatus;
   confirmed_at: string | null;
+  trial_teacher?: string | null;
+  trial_room?: string | null;
+};
+
+// CRM에서 불러오는 체험수업 배정 선택지 (강사·연습실)
+export type CrmScheduleOptions = {
+  teachers: string[];
+  rooms: string[];
 };
 
 export type ConsultationInput = {

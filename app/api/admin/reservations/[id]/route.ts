@@ -22,7 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (!(await hasAdminSession())) return Response.json({ error: "인증이 필요합니다." }, { status: 401 });
     const { id } = await params;
     if (!validReservationId(id)) return Response.json({ error: "예약 번호가 올바르지 않습니다." }, { status: 400 });
-    const body = await request.json() as { confirmed_at?: string | null };
+    const body = await request.json() as { confirmed_at?: string | null; trial_teacher?: string | null; trial_room?: string | null };
     const confirmedAt = typeof body.confirmed_at === "string" && body.confirmed_at ? new Date(body.confirmed_at) : null;
     if (confirmedAt && Number.isNaN(confirmedAt.getTime())) return Response.json({ error: "확정 일시가 올바르지 않습니다." }, { status: 400 });
 
@@ -30,7 +30,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { data: existing } = await supabase.from("reservations").select("status").eq("id", id).maybeSingle();
     if (!existing) return Response.json({ error: "예약을 찾지 못했습니다." }, { status: 404 });
     const status = existing.status === "상담완료" ? "상담완료" : confirmedAt ? "확정" : "대기";
-    const { data, error } = await supabase.from("reservations").update({ confirmed_at: confirmedAt?.toISOString() ?? null, status }).eq("id", id).select("*").single();
+    const updates: Record<string, unknown> = { confirmed_at: confirmedAt?.toISOString() ?? null, status };
+    if (body.trial_teacher !== undefined) updates.trial_teacher = typeof body.trial_teacher === "string" ? body.trial_teacher.trim().slice(0, 40) || null : null;
+    if (body.trial_room !== undefined) updates.trial_room = typeof body.trial_room === "string" ? body.trial_room.trim().slice(0, 40) || null : null;
+    const { data, error } = await supabase.from("reservations").update(updates).eq("id", id).select("*").single();
     if (error) return Response.json({ error: "확정 일시를 저장하지 못했습니다." }, { status: 502 });
     return Response.json(data, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
