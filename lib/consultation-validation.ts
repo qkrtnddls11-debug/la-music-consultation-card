@@ -4,6 +4,7 @@ import type {
   LessonExperience,
   SchedulePreference,
 } from "@/lib/types";
+import { DEFAULT_BRANCH } from "@/lib/types";
 
 const MAX_SHORT = 160;
 const MAX_LONG = 4000;
@@ -79,6 +80,7 @@ export function normalizeConsultation(
     reservation_id: clean(source.reservation_id, 40) || null,
     card_type: cardType,
     submission_source: source.submission_source === "link" ? "link" : "tablet",
+    branch_name: clean(source.branch_name, 60) || DEFAULT_BRANCH,
     name,
     birth_date: birthDate || null,
     student_phone: clean(source.student_phone, 20),

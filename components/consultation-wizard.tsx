@@ -82,10 +82,11 @@ function isDifficultyInstrument(subject: string): subject is (typeof DIFFICULTY_
   return DIFFICULTY_INSTRUMENTS.some((instrument) => instrument === subject);
 }
 
-function createEmptyDraft(submissionSource: SubmissionSource): ConsultationInput {
+function createEmptyDraft(submissionSource: SubmissionSource, branchName?: string): ConsultationInput {
   return {
     ...EMPTY_CONSULTATION,
     submission_source: submissionSource,
+    branch_name: branchName || EMPTY_CONSULTATION.branch_name,
     subjects: [],
     vocal_difficulties: [],
     instrument_difficulties: [],
@@ -243,8 +244,8 @@ function SubBlock({ children }: { children: React.ReactNode }) {
   return <div className="mt-[18px] rounded-[14px] bg-[#f7f4ee] p-4">{children}</div>;
 }
 
-export function ConsultationWizard({ submissionSource, reservationId }: { submissionSource: SubmissionSource; reservationId?: string }) {
-  const [draft, setDraft] = useState<ConsultationInput>(() => createEmptyDraft(submissionSource));
+export function ConsultationWizard({ submissionSource, reservationId, branchName }: { submissionSource: SubmissionSource; reservationId?: string; branchName?: string }) {
+  const [draft, setDraft] = useState<ConsultationInput>(() => createEmptyDraft(submissionSource, branchName));
   const [details, setDetails] = useState<SubjectDetails>({ ...EMPTY_DETAILS });
   const [birth, setBirth] = useState(() => ({ ...EMPTY_BIRTH_DATE }));
   const [targetKnown, setTargetKnown] = useState<boolean | null>(null);
@@ -285,7 +286,8 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
         const parsed = splitDetailedSubjects(result.subjects);
         const purpose = result.lesson_type === "입시" ? "프로·입시" : "여가·자기계발";
         const merged: ConsultationInput = {
-          ...createEmptyDraft("tablet"),
+          ...createEmptyDraft("tablet", branchName),
+          branch_name: result.branch_name || branchName || EMPTY_CONSULTATION.branch_name,
           reservation_id: result.id,
           name: result.name,
           birth_date: result.birth_date,
@@ -314,7 +316,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
     }
     void loadReservation();
     return () => { cancelled = true; };
-  }, [reservationId]);
+  }, [reservationId, branchName]);
 
   useEffect(() => {
     return () => {
@@ -333,7 +335,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
         window.location.assign("/admin?tab=reservations");
         return;
       }
-      setDraft(createEmptyDraft(submissionSource));
+      setDraft(createEmptyDraft(submissionSource, branchName));
       setDetails({ 기타: [], 피아노: [], 트럼펫: [], 플루트: [] });
       setBirth({ ...EMPTY_BIRTH_DATE });
       setTargetKnown(null);
@@ -343,7 +345,7 @@ export function ConsultationWizard({ submissionSource, reservationId }: { submis
       setSubmitted(false);
     }, 3000);
     return () => window.clearTimeout(timer);
-  }, [reservationId, submissionSource, submitted]);
+  }, [reservationId, submissionSource, submitted, branchName]);
 
   function patchDraft<K extends keyof ConsultationInput>(key: K, value: ConsultationInput[K]) {
     setDraft((previous) => ({ ...previous, [key]: value }));

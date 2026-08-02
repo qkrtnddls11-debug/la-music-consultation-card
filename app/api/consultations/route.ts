@@ -16,10 +16,15 @@ export async function POST(request: Request) {
         return Response.json({ error: "예약 연결 권한이 없거나 예약 번호가 올바르지 않습니다." }, { status: 401 });
       }
       const supabase = createAdminSupabase();
-      const { data: reservation, error: reservationError } = await supabase.from("reservations").select("id,status").eq("id", reservationId).maybeSingle();
+      const { data: reservation, error: reservationError } = await supabase.from("reservations").select("id,status,branch_name").eq("id", reservationId).maybeSingle();
       if (reservationError || !reservation) return Response.json({ error: "연결된 예약을 찾지 못했습니다." }, { status: 404 });
 
-      const { data: consultation, error: insertError } = await supabase.from("consultations").insert(validation.data).select("id").single();
+      // 지점은 예약의 지점을 그대로 따라간다
+      const linkedPayload = {
+        ...validation.data,
+        branch_name: (reservation as { branch_name?: string | null }).branch_name || validation.data.branch_name,
+      };
+      const { data: consultation, error: insertError } = await supabase.from("consultations").insert(linkedPayload).select("id").single();
       if (insertError || !consultation) {
         console.error("linked consultation insert failed", { code: insertError?.code, message: insertError?.message });
         return Response.json({ error: insertError?.code === "23505" ? "이미 상담이 완료된 예약입니다." : "상담 카드를 저장하지 못했습니다." }, { status: insertError?.code === "23505" ? 409 : 502 });

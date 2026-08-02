@@ -5,6 +5,7 @@ import { BirthDateFields } from "@/components/birth-date-fields";
 import { birthDateFromParts, EMPTY_BIRTH_DATE } from "@/lib/birth-date";
 import {
   DAYS,
+  DEFAULT_BRANCH,
   EMPTY_RESERVATION_SCHEDULE,
   GUITAR_DETAILS,
   STYLE_DETAILS,
@@ -47,9 +48,9 @@ function Chip({ selected, onClick, children, compact = false }: { selected: bool
 
 const inputClass = "min-h-14 w-full min-w-0 rounded-xl border-[1.5px] border-[#d8d2c8] bg-[#faf9f6] px-4 py-3 text-base focus:border-[#e8a23d] focus:bg-white focus:outline-none";
 
-export function ReservationWizard({ source }: { source: ReservationSource }) {
+export function ReservationWizard({ source, branchName }: { source: ReservationSource; branchName?: string }) {
   const [step, setStep] = useState<Step>("name");
-  const [draft, setDraft] = useState<ReservationInput>({ name: "", phone: "", gender: "", birth_date: "", subjects: [], lesson_type: "", schedule_preferences: EMPTY_RESERVATION_SCHEDULE.map((item) => ({ ...item, days: [...item.days] })), schedule_note: "", source });
+  const [draft, setDraft] = useState<ReservationInput>({ name: "", phone: "", gender: "", birth_date: "", subjects: [], lesson_type: "", schedule_preferences: EMPTY_RESERVATION_SCHEDULE.map((item) => ({ ...item, days: [...item.days] })), schedule_note: "", source, branch_name: branchName || DEFAULT_BRANCH });
   const [details, setDetails] = useState<Record<DetailSubject, string[]>>({ ...EMPTY_DETAILS });
   const [birth, setBirth] = useState(() => ({ ...EMPTY_BIRTH_DATE }));
   const [today] = useState<Date>(() => new Date());

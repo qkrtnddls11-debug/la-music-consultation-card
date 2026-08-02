@@ -18,6 +18,7 @@ import type {
   ReservationRecord,
   VocalDiagnosisRecord,
 } from "@/lib/types";
+import { DEFAULT_BRANCH } from "@/lib/types";
 
 type AuthState = "checking" | "signed-out" | "signed-in";
 type CardFilter = "전체" | "일반" | "입시";
@@ -561,6 +562,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
                     <h2 className="text-xl font-extrabold">{record.name}</h2>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.card_type === "입시" ? "bg-[#dcecf9] text-[#2f6d9f]" : "bg-[#eee9e0] text-[#5a5349]"}`}>{record.card_type}</span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.submission_source === "link" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}>{record.submission_source === "link" ? "링크 접수" : "현장"}</span>
+                    <span className="rounded-full bg-[#f3efe7] px-2.5 py-1 text-xs font-semibold text-[#9a9389]">{record.branch_name || DEFAULT_BRANCH}</span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.status === "등록" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{record.status === "등록" ? "등록함" : "상담만 함"}</span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${consentByConsultation.has(record.id) ? "bg-emerald-100 text-emerald-800" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "bg-violet-100 text-violet-800" : "bg-[#eee9e0] text-[#6b6459]"}`}>{consentByConsultation.has(record.id) ? "서명 완료" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "서명 대기 중" : "서명 미요청"}</span>
                   </div>
@@ -592,7 +594,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
               return <article key={reservation.id} className={`rounded-[18px] p-4 shadow-[0_2px_10px_rgba(0,0,0,0.05)] sm:p-5 ${todayConfirmed ? "border-2 border-[#e8a23d] bg-amber-50" : "bg-white"}`}>
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-[230px] flex-1">
-                    <div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-black">{reservation.name}</h2>{todayConfirmed ? <span className="rounded-full bg-[#e8a23d] px-2.5 py-1 text-xs font-black text-[#2b2723]">오늘 상담</span> : null}<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${reservation.status === "상담완료" ? "bg-emerald-100 text-emerald-800" : reservation.status === "확정" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"}`}>{reservation.status}</span><span className="rounded-full bg-[#eee9e0] px-2.5 py-1 text-xs font-bold text-[#5a5349]">{reservation.source === "link" ? "링크" : reservation.source === "tablet" ? "현장" : "기타"}</span></div>
+                    <div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-black">{reservation.name}</h2>{todayConfirmed ? <span className="rounded-full bg-[#e8a23d] px-2.5 py-1 text-xs font-black text-[#2b2723]">오늘 상담</span> : null}<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${reservation.status === "상담완료" ? "bg-emerald-100 text-emerald-800" : reservation.status === "확정" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"}`}>{reservation.status}</span><span className="rounded-full bg-[#eee9e0] px-2.5 py-1 text-xs font-bold text-[#5a5349]">{reservation.source === "link" ? "링크" : reservation.source === "tablet" ? "현장" : "기타"}</span><span className="rounded-full bg-[#f3efe7] px-2.5 py-1 text-xs font-semibold text-[#9a9389]">{reservation.branch_name || DEFAULT_BRANCH}</span></div>
                     <p className="mt-2 text-sm font-semibold text-[#4a453d]">{reservation.phone} · {reservation.gender} · {reservation.birth_date}</p>
                     <p className="mt-1 text-sm text-[#6b6459]">{reservation.lesson_type} · {reservation.subjects.join(", ")}</p>
                     <div className="mt-3 rounded-xl bg-white/80 p-3 text-sm leading-6 text-[#5f584e]">{reservation.schedule_preferences.map((item) => item.days?.length || item.day || item.timeSlot || item.timeText ? <p key={item.rank}><strong>{item.rank}순위</strong> · {reservationScheduleLabel(item)}</p> : null)}{reservation.schedule_note ? <p className="mt-2 border-t border-[#ded8cf] pt-2"><strong>참고</strong> · {reservation.schedule_note}</p> : null}</div>

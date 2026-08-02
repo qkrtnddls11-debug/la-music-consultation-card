@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { consentChoice, isUnder19 } from "@/lib/consent-utils";
 import { createAdminSupabase } from "@/lib/supabase-server";
+import { DEFAULT_BRANCH } from "@/lib/types";
 
 const BUCKET = "consent-signatures";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -41,7 +42,7 @@ export async function createConsent(body: Record<string, unknown>, consultationI
     const nameTraceBuffer = nameTrace.buffer!;
     const signatureBuffer = signature.buffer!;
 
-    const { data: consultation, error: consultationError } = await supabase.from("consultations").select("id,name,birth_date").eq("id", consultationId).maybeSingle();
+    const { data: consultation, error: consultationError } = await supabase.from("consultations").select("id,name,birth_date,branch_name").eq("id", consultationId).maybeSingle();
     if (consultationError || !consultation) return { error: "연결된 상담 카드를 찾지 못했습니다.", status: 404 };
     const { data: existing, error: existingError } = await supabase.from("consents").select("id").eq("consultation_id", consultationId).maybeSingle();
     if (existingError) return { error: "기존 동의서를 확인하지 못했습니다.", status: 502 };
@@ -68,6 +69,7 @@ export async function createConsent(body: Record<string, unknown>, consultationI
 
     const { data: consent, error: insertError } = await supabase.from("consents").insert({
       consultation_id: consultationId,
+      branch_name: (consultation as { branch_name?: string | null }).branch_name || DEFAULT_BRANCH,
       consent_request_id: consentRequestId ?? null,
       signer_name: minor ? guardianName : consultation.name,
       signer_role: minor ? "법정대리인" : "본인",

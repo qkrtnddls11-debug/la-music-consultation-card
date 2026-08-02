@@ -63,6 +63,9 @@ export type ReservationSchedulePreference = {
   timeText?: string;
 };
 
+// 모든 데이터는 지점별로 저장된다. 지점 표시가 없던 예전 데이터는 기본 지점 것으로 본다.
+export const DEFAULT_BRANCH = "수원 망포점";
+
 export type ReservationInput = {
   name: string;
   phone: string;
@@ -73,6 +76,7 @@ export type ReservationInput = {
   schedule_preferences: ReservationSchedulePreference[];
   schedule_note: string;
   source: ReservationSource;
+  branch_name: string;
 };
 
 export type ReservationRecord = ReservationInput & {
@@ -86,6 +90,7 @@ export type ConsultationInput = {
   reservation_id: string | null;
   card_type: CardType;
   submission_source: SubmissionSource;
+  branch_name: string;
   name: string;
   birth_date: string | null;
   student_phone: string;
@@ -211,6 +216,7 @@ export const EMPTY_CONSULTATION: ConsultationInput = {
   reservation_id: null,
   card_type: "일반",
   submission_source: "tablet",
+  branch_name: DEFAULT_BRANCH,
   name: "",
   birth_date: null,
   student_phone: "",

@@ -3,7 +3,7 @@ import type {
   ReservationSchedulePreference,
   ReservationSource,
 } from "@/lib/types";
-import { DAYS, TIME_SLOTS } from "@/lib/types";
+import { DAYS, DEFAULT_BRANCH, TIME_SLOTS } from "@/lib/types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -75,6 +75,7 @@ export function normalizeReservation(value: unknown): { data?: ReservationInput;
       schedule_preferences: schedule,
       schedule_note: scheduleNote,
       source: reservationSource,
+      branch_name: clean(source.branch_name, 60) || DEFAULT_BRANCH,
     },
   };
 }

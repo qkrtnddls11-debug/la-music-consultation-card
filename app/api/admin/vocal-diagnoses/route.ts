@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     const supabase = createAdminSupabase();
     let consultationId: string | null = null;
     let studentName = body.student_name;
+    let linkedBranchName: string | null = null;
 
     if (body.consultation_id) {
       if (!UUID_PATTERN.test(body.consultation_id)) {
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
 
       const { data: consultation, error: consultationError } = await supabase
         .from("consultations")
-        .select("id,name,subjects")
+        .select("id,name,subjects,branch_name")
         .eq("id", consultationId)
         .maybeSingle();
 
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
         return Response.json(existing, { headers: { "Cache-Control": "private, no-store" } });
       }
       studentName = consultation.name;
+      linkedBranchName = (consultation as { branch_name?: string | null }).branch_name || null;
     }
 
     const normalized = normalizeVocalDiagnosis({ ...body, consultation_id: consultationId, student_name: studentName });
@@ -81,7 +83,10 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from("vocal_diagnoses")
-      .insert(vocalDiagnosisDatabasePayload(normalized.data))
+      .insert({
+        ...vocalDiagnosisDatabasePayload(normalized.data),
+        ...(linkedBranchName ? { branch_name: linkedBranchName } : {})
+      })
       .select("*")
       .single();
 
