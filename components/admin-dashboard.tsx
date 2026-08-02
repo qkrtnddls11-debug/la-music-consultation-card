@@ -96,28 +96,118 @@ function toTwentyFourHour(period: string, hour: string) {
   return String(normalizedHour).padStart(2, "0");
 }
 
-function ReservationConfirmEditor({ record, busy, options, onSave }: { record: ReservationRecord; busy: boolean; options: CrmScheduleOptions | null; onSave: (value: string, teacher: string, room: string) => void }) {
-  const initial = datetimeLocalValue(record.confirmed_at);
-  const [datePart = "", timePart = ""] = initial.split("T");
-  const [initialYear = "", initialMonth = "", initialDay = ""] = datePart.split("-");
-  const [initialHour = "", initialMinute = ""] = timePart.split(":");
-  const initialTwelveHour = toTwelveHour(initialHour);
+type EditableSlot = { subject: string; atLocal: string; teacher: string; room: string };
+
+function subjectBaseName(entry: string) { return entry.replace(/\(.*\)$/, "").trim(); }
+function subjectMatchTokens(entry: string) {
+  const detail = /\((.*)\)/.exec(entry)?.[1] || "";
+  return [subjectBaseName(entry), ...detail.split(",").map((token) => token.trim())].filter(Boolean);
+}
+function teacherTeachesSubject(subjectEntry: string, teacherSubjectText: string) {
+  if (!teacherSubjectText) return false;
+  const teacherTokens = teacherSubjectText.split(/[,·/\s]+/).map((token) => token.trim()).filter(Boolean);
+  return subjectMatchTokens(subjectEntry).some((token) => teacherTokens.some((teacherToken) => teacherToken.includes(token) || token.includes(teacherToken)));
+}
+function timeRangesOverlap(startA: string, endA: string, startB: string, endB: string) { return startA < endB && startB < endA; }
+function addMinutesToClock(time: string, minutes: number) {
+  const [hourPart, minutePart] = time.split(":").map(Number);
+  const total = hourPart * 60 + minutePart + minutes;
+  return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+}
+function slotsFromRecord(record: ReservationRecord): EditableSlot[] {
+  const subjects = record.subjects.length > 0 ? record.subjects : ["체험"];
+  return subjects.map((entry, index) => {
+    const saved = (record.trial_slots || []).find((slot) => slot.subject === entry);
+    if (saved) return { subject: entry, atLocal: datetimeLocalValue(saved.at), teacher: saved.teacher || "", room: saved.room || "" };
+    if (index === 0 && (record.confirmed_at || record.trial_teacher || record.trial_room)) {
+      return { subject: entry, atLocal: datetimeLocalValue(record.confirmed_at), teacher: record.trial_teacher || "", room: record.trial_room || "" };
+    }
+    return { subject: entry, atLocal: "", teacher: "", room: "" };
+  });
+}
+
+function TrialSlotEditor({ slot, options, disabled, idPrefix, onChange }: { slot: EditableSlot; options: CrmScheduleOptions | null; disabled: boolean; idPrefix: string; onChange: (next: EditableSlot) => void }) {
+  const [initialDatePart = "", initialTimePart = ""] = slot.atLocal.split("T");
+  const [initialYear = "", initialMonth = "", initialDay = ""] = initialDatePart.split("-");
+  const [initialHour24 = "", initialMinute = ""] = initialTimePart.split(":");
+  const initialTwelve = toTwelveHour(initialHour24);
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
   const [day, setDay] = useState(initialDay);
-  const [period, setPeriod] = useState(initialTwelveHour.period);
-  const [hour, setHour] = useState(initialTwelveHour.hour);
+  const [period, setPeriod] = useState(initialTwelve.period);
+  const [hour, setHour] = useState(initialTwelve.hour);
   const [minute, setMinute] = useState(initialMinute);
-  const [teacher, setTeacher] = useState(record.trial_teacher || "");
-  const [room, setRoom] = useState(record.trial_room || "");
-  const teacherOptions = Array.from(new Set([...(options?.teachers || []), ...(record.trial_teacher ? [record.trial_teacher] : [])]));
-  const roomOptions = Array.from(new Set([...(options?.rooms || []), ...(record.trial_room ? [record.trial_room] : [])]));
-  const twentyFourHour = toTwentyFourHour(period, hour);
-  const value = /^\d{4}$/.test(year) && month && day && twentyFourHour && minute ? `${year}-${month}-${day}T${twentyFourHour}:${minute}` : "";
-  const unchanged = value === initial && teacher === (record.trial_teacher || "") && room === (record.trial_room || "");
   const selectClass = "min-h-12 min-w-0 rounded-xl border-[1.5px] border-[#d8d2c8] bg-white px-2 text-sm font-bold focus:border-[#e8a23d] focus:outline-none disabled:bg-[#eee9e0]";
+
+  function emitDateTime(nextYear: string, nextMonth: string, nextDay: string, nextPeriod: string, nextHour: string, nextMinute: string) {
+    const nextHour24 = toTwentyFourHour(nextPeriod, nextHour);
+    const complete = /^\d{4}$/.test(nextYear) && nextMonth && nextDay && nextHour24 && nextMinute;
+    onChange({ ...slot, atLocal: complete ? `${nextYear}-${nextMonth}-${nextDay}T${nextHour24}:${nextMinute}` : "" });
+  }
+
+  const hour24 = toTwentyFourHour(period, hour);
+  const datePart = /^\d{4}$/.test(year) && month && day ? `${year}-${month}-${day}` : "";
+  const startTime = hour24 && minute ? `${hour24}:${minute}` : "";
+  const endTime = startTime ? addMinutesToClock(startTime, 50) : "";
+  const dayBusySlots = datePart ? (options?.busySlots || []).filter((busySlot) => busySlot.date === datePart) : [];
+  const overlapping = startTime ? dayBusySlots.filter((busySlot) => timeRangesOverlap(startTime, endTime, busySlot.start, busySlot.end)) : [];
+
+  const subjectTeachers = options?.teacherSubjects && Object.keys(options.teacherSubjects).length > 0
+    ? (options.teachers || []).filter((name) => teacherTeachesSubject(slot.subject, options.teacherSubjects?.[name] || ""))
+    : (options?.teachers || []);
+  const teacherList = Array.from(new Set([...(subjectTeachers.length > 0 ? subjectTeachers : options?.teachers || []), ...(slot.teacher ? [slot.teacher] : [])]));
+  const roomList = Array.from(new Set([...(options?.rooms || []), ...(slot.room ? [slot.room] : [])]));
+
+  return <div className="rounded-xl border border-[#e4ded4] bg-[#faf9f6] p-2.5">
+    <p className="text-sm font-black text-[#4a453d]">{slot.subject} 체험수업</p>
+    <div className="mt-1.5"><BirthDateFields value={{ year, month, day }} onChange={(next) => { setYear(next.year); setMonth(next.month); setDay(next.day); emitDateTime(next.year, next.month, next.day, period, hour, minute); }} inputClassName={selectClass} autoComplete={false} disabled={disabled} idPrefix={idPrefix} labelPrefix={`${slot.subject} 체험`} /></div>
+    <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+      <select aria-label={`${slot.subject} 오전 또는 오후`} value={period} onChange={(event) => { setPeriod(event.target.value); emitDateTime(year, month, day, event.target.value, hour, minute); }} disabled={disabled} className={selectClass}><option value="">오전/오후</option><option value="오전">오전</option><option value="오후">오후</option></select>
+      <select aria-label={`${slot.subject} 시`} value={hour} onChange={(event) => { setHour(event.target.value); emitDateTime(year, month, day, period, event.target.value, minute); }} disabled={disabled} className={selectClass}><option value="">시</option>{Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}시</option>)}</select>
+      <select aria-label={`${slot.subject} 분`} value={minute} onChange={(event) => { setMinute(event.target.value); emitDateTime(year, month, day, period, hour, event.target.value); }} disabled={disabled} className={selectClass}><option value="">분</option>{["00", "10", "20", "30", "40", "50"].map((item) => <option key={item} value={item}>{item}분</option>)}</select>
+    </div>
+    <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+      <select aria-label={`${slot.subject} 체험 강사`} value={slot.teacher} onChange={(event) => onChange({ ...slot, teacher: event.target.value })} disabled={disabled} className={selectClass}>
+        <option value="">강사 선택</option>
+        {teacherList.map((name) => {
+          const teacherBusy = overlapping.find((busySlot) => busySlot.teacher === name);
+          return <option key={name} value={name} disabled={Boolean(teacherBusy) && name !== slot.teacher}>{name}{teacherBusy ? ` (${teacherBusy.start} 수업중)` : ""}</option>;
+        })}
+      </select>
+      <select aria-label={`${slot.subject} 체험 연습실`} value={slot.room} onChange={(event) => onChange({ ...slot, room: event.target.value })} disabled={disabled} className={selectClass}>
+        <option value="">연습실 선택</option>
+        {roomList.map((name) => {
+          const occupant = overlapping.find((busySlot) => busySlot.room === name);
+          return <option key={name} value={name} disabled={Boolean(occupant) && name !== slot.room}>{name}{occupant ? ` (${occupant.teacher} ${occupant.start} 수업중)` : ""}</option>;
+        })}
+      </select>
+    </div>
+  </div>;
+}
+
+function ReservationConfirmEditor({ record, busy, options, onSave }: { record: ReservationRecord; busy: boolean; options: CrmScheduleOptions | null; onSave: (slots: EditableSlot[]) => void }) {
+  const initialSlots = slotsFromRecord(record);
+  const [slots, setSlots] = useState<EditableSlot[]>(initialSlots);
   const disabled = busy || record.status === "상담완료";
-  return <div><p className="text-sm font-extrabold text-[#6b6459]">상담 확정 일시</p><div className="mt-1.5"><BirthDateFields value={{ year, month, day }} onChange={(nextValue) => { setYear(nextValue.year); setMonth(nextValue.month); setDay(nextValue.day); }} inputClassName={selectClass} autoComplete={false} disabled={disabled} idPrefix={`reservation-confirm-${record.id}`} labelPrefix="상담 확정" /></div><div className="mt-1.5 grid grid-cols-3 gap-1.5"><select aria-label="확정 오전 또는 오후" value={period} onChange={(event) => setPeriod(event.target.value)} disabled={disabled} className={selectClass}><option value="">오전/오후</option><option value="오전">오전</option><option value="오후">오후</option></select><select aria-label="확정 시" value={hour} onChange={(event) => setHour(event.target.value)} disabled={disabled} className={selectClass}><option value="">시</option>{Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}시</option>)}</select><select aria-label="확정 분" value={minute} onChange={(event) => setMinute(event.target.value)} disabled={disabled} className={selectClass}><option value="">분</option>{["00", "10", "20", "30", "40", "50"].map((item) => <option key={item} value={item}>{item}분</option>)}</select></div><div className="mt-1.5 grid grid-cols-2 gap-1.5"><select aria-label="체험 강사" value={teacher} onChange={(event) => setTeacher(event.target.value)} disabled={disabled} className={selectClass}><option value="">강사 선택</option>{teacherOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select><select aria-label="체험 연습실" value={room} onChange={(event) => setRoom(event.target.value)} disabled={disabled} className={selectClass}><option value="">연습실 선택</option>{roomOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>{options && options.teachers.length === 0 ? <p className="mt-1 text-xs font-semibold text-[#9a9389]">강사 목록은 CRM 상담관리 화면을 한 번 열면 채워져요</p> : null}<button type="button" disabled={busy || !value || unchanged || record.status === "상담완료"} onClick={() => onSave(value, teacher, room)} className="mt-2 min-h-12 w-full rounded-xl bg-[#e8a23d] px-4 text-sm font-black text-[#2b2723] disabled:bg-[#eee9e0] disabled:text-[#9a9389]">{busy ? "저장 중…" : "확정 일시 저장"}</button>{record.confirmed_at && record.status !== "상담완료" ? <button type="button" disabled={busy} onClick={() => onSave("", teacher, room)} className="mt-1.5 min-h-12 w-full rounded-xl bg-[#eee9e0] text-sm font-bold text-[#6b6459]">확정 취소</button> : null}</div>;
+  const unchanged = JSON.stringify(slots) === JSON.stringify(initialSlots);
+  const hasAnySchedule = slots.some((slot) => slot.atLocal);
+  return <div>
+    <p className="text-sm font-extrabold text-[#6b6459]">체험수업 배정 {slots.length > 1 ? `(${slots.length}과목)` : ""}</p>
+    <div className="mt-1.5 space-y-2">
+      {slots.map((slot, index) => (
+        <TrialSlotEditor
+          key={slot.subject}
+          slot={slot}
+          options={options}
+          disabled={disabled}
+          idPrefix={`reservation-slot-${record.id}-${index}`}
+          onChange={(next) => setSlots((current) => current.map((item, itemIndex) => (itemIndex === index ? next : item)))}
+        />
+      ))}
+    </div>
+    {options && options.teachers.length === 0 ? <p className="mt-1 text-xs font-semibold text-[#9a9389]">강사 목록은 CRM 상담관리 화면을 한 번 열면 채워져요</p> : null}
+    <button type="button" disabled={disabled || unchanged || !hasAnySchedule} onClick={() => onSave(slots)} className="mt-2 min-h-12 w-full rounded-xl bg-[#e8a23d] px-4 text-sm font-black text-[#2b2723] disabled:bg-[#eee9e0] disabled:text-[#9a9389]">{busy ? "저장 중…" : "체험수업 배정 저장"}</button>
+  </div>;
 }
 
 export function AdminDashboard({ initialView = "consultations" }: { initialView?: AdminView }) {
@@ -361,14 +451,31 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
     setAuth("signed-out");
   }
 
-  async function updateReservationTime(record: ReservationRecord, value: string, teacher = "", room = "") {
+  async function updateReservationSlots(record: ReservationRecord, slots: EditableSlot[]) {
     setUpdatingId(record.id); setLoadError("");
     try {
-      const response = await fetch(`/api/admin/reservations/${record.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmed_at: value ? new Date(value).toISOString() : null, trial_teacher: teacher || null, trial_room: room || null }) });
+      const trialSlots = slots.map((slot) => ({
+        subject: slot.subject,
+        at: slot.atLocal ? new Date(slot.atLocal).toISOString() : null,
+        teacher: slot.teacher,
+        room: slot.room
+      }));
+      const scheduled = trialSlots.filter((slot) => slot.at).sort((a, b) => (a.at! < b.at! ? -1 : 1));
+      const primary = scheduled[0] || trialSlots[0];
+      const response = await fetch(`/api/admin/reservations/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confirmed_at: scheduled[0]?.at ?? null,
+          trial_teacher: primary?.teacher || null,
+          trial_room: primary?.room || null,
+          trial_slots: trialSlots
+        })
+      });
       const result = await response.json() as ReservationRecord | { error?: string };
-      if (!response.ok || !("id" in result)) throw new Error("error" in result && result.error ? result.error : "확정 일시를 저장하지 못했습니다.");
+      if (!response.ok || !("id" in result)) throw new Error("error" in result && result.error ? result.error : "체험수업 배정을 저장하지 못했습니다.");
       setReservations((current) => current.map((item) => item.id === result.id ? result : item));
-    } catch (error) { setLoadError(error instanceof Error ? error.message : "확정 일시를 저장하지 못했습니다."); }
+    } catch (error) { setLoadError(error instanceof Error ? error.message : "체험수업 배정을 저장하지 못했습니다."); }
     finally { setUpdatingId(""); }
   }
 
@@ -621,7 +728,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
                     <p className="mt-2 text-xs text-[#9a9389]">접수 {formatCreatedAt(reservation.created_at)}</p>
                   </div>
                   <div className="w-full max-w-sm space-y-3 sm:w-[310px]">
-                    <ReservationConfirmEditor key={`${reservation.confirmed_at ?? "empty"}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`} record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(value, teacher, room) => void updateReservationTime(reservation, value, teacher, room)} />
+                    <ReservationConfirmEditor key={`${reservation.confirmed_at ?? "empty"}-${JSON.stringify(reservation.trial_slots ?? [])}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`} record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(slots) => void updateReservationSlots(reservation, slots)} />
                     {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button> : <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2b2723] px-4 text-sm font-black text-white">상담 시작 →</Link>}
                     <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button>
                   </div>

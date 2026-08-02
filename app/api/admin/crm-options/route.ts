@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await createAdminSupabase()
       .from("crm_schedule_options")
-      .select("teachers,rooms")
+      .select("teachers,rooms,teacher_subjects,busy_slots")
       .eq("branch_name", branch)
       .maybeSingle();
 
@@ -23,7 +23,9 @@ export async function GET(request: Request) {
     return Response.json(
       {
         teachers: Array.isArray(data?.teachers) ? data.teachers : [],
-        rooms: Array.isArray(data?.rooms) ? data.rooms : []
+        rooms: Array.isArray(data?.rooms) ? data.rooms : [],
+        teacherSubjects: data?.teacher_subjects && typeof data.teacher_subjects === "object" ? data.teacher_subjects : {},
+        busySlots: Array.isArray(data?.busy_slots) ? data.busy_slots : []
       },
       { headers: { "Cache-Control": "private, no-store" } }
     );

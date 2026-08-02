@@ -79,6 +79,14 @@ export type ReservationInput = {
   branch_name: string;
 };
 
+// 과목별 체험수업 배정 (한 예약에서 과목이 여러 개면 슬롯도 여러 개)
+export type TrialSlot = {
+  subject: string;
+  at: string | null;
+  teacher: string;
+  room: string;
+};
+
 export type ReservationRecord = ReservationInput & {
   id: string;
   created_at: string;
@@ -86,12 +94,26 @@ export type ReservationRecord = ReservationInput & {
   confirmed_at: string | null;
   trial_teacher?: string | null;
   trial_room?: string | null;
+  trial_slots?: TrialSlot[] | null;
 };
 
-// CRM에서 불러오는 체험수업 배정 선택지 (강사·연습실)
+// CRM 수업 시간표 한 칸 (연습실·강사 사용중 표시용)
+export type CrmBusySlot = {
+  date: string;
+  start: string;
+  end: string;
+  room: string;
+  teacher: string;
+  student: string;
+  subject: string;
+};
+
+// CRM에서 불러오는 체험수업 배정 선택지 (강사·연습실·강사별 과목·시간표)
 export type CrmScheduleOptions = {
   teachers: string[];
   rooms: string[];
+  teacherSubjects?: Record<string, string>;
+  busySlots?: CrmBusySlot[];
 };
 
 export type ConsultationInput = {
