@@ -68,6 +68,27 @@ function seoulDay(value: Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
 }
 
+function seoulMonth(value: Date) {
+  return seoulDay(value).slice(0, 7);
+}
+
+function monthOfIso(iso: string | null | undefined) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : seoulMonth(date);
+}
+
+function shiftMonthKey(key: string, delta: number) {
+  const [year, month] = key.split("-").map(Number);
+  const date = new Date(year, month - 1 + delta, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthKeyLabel(key: string) {
+  const [year, month] = key.split("-");
+  return `${year}년 ${Number(month)}월`;
+}
+
 function datetimeLocalValue(value: string | null) {
   if (!value) return "";
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value));
@@ -230,6 +251,8 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
   const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [cardFilter, setCardFilter] = useState<CardFilter>("전체");
+  const [registrationFilter, setRegistrationFilter] = useState<"전체" | "미등록" | "등록완료">("전체");
+  const [monthKey, setMonthKey] = useState(() => seoulMonth(new Date()));
   const [view, setView] = useState<AdminView>(initialView);
   const [renderedAt] = useState(() => Date.now());
   const [selected, setSelected] = useState<ConsultationRecord | null>(null);
@@ -399,11 +422,30 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
     return Array.from(names);
   }, [reservations, records, diagnoses]);
 
+  // 월 단위 보기: 이번 달 접수·이번 달 체험 확정 건을 보여주고,
+  // 아직 진행 중(대기·확정)인 예약은 지난달 접수여도 이번 달 화면에 이월되어 계속 보인다
+  const currentMonthKey = seoulMonth(new Date());
+  const monthlyRecords = useMemo(
+    () => branchRecords.filter((record) => monthOfIso(record.created_at) === monthKey),
+    [branchRecords, monthKey]
+  );
+  const monthlyDiagnoses = useMemo(
+    () => branchDiagnoses.filter((diagnosis) => monthOfIso(diagnosis.created_at) === monthKey),
+    [branchDiagnoses, monthKey]
+  );
+  const monthlyReservations = useMemo(() => branchReservations.filter((item) => (
+    monthOfIso(item.created_at) === monthKey
+    || monthOfIso(item.confirmed_at) === monthKey
+    || (monthKey === currentMonthKey && item.status !== "상담완료")
+  )), [branchReservations, monthKey, currentMonthKey]);
+
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ko-KR");
     const queryDigits = digits(query);
-    return branchRecords.filter((record) => {
+    return monthlyRecords.filter((record) => {
       if (cardFilter !== "전체" && record.card_type !== cardFilter) return false;
+      if (registrationFilter === "등록완료" && record.status !== "등록") return false;
+      if (registrationFilter === "미등록" && record.status === "등록") return false;
       if (!query) return true;
       return record.name.toLocaleLowerCase("ko-KR").includes(query)
         || (queryDigits.length > 0 && (
@@ -411,24 +453,24 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
           || digits(record.parent_phone).includes(queryDigits)
         ));
     });
-  }, [cardFilter, branchRecords, search]);
+  }, [cardFilter, registrationFilter, monthlyRecords, search]);
 
   const filteredDiagnoses = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ko-KR");
-    if (!query) return branchDiagnoses;
-    return branchDiagnoses.filter((diagnosis) => diagnosis.student_name.toLocaleLowerCase("ko-KR").includes(query));
-  }, [branchDiagnoses, search]);
+    if (!query) return monthlyDiagnoses;
+    return monthlyDiagnoses.filter((diagnosis) => diagnosis.student_name.toLocaleLowerCase("ko-KR").includes(query));
+  }, [monthlyDiagnoses, search]);
 
   const filteredReservations = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ko-KR");
     const queryDigits = digits(query);
     const today = seoulDay(new Date());
-    return branchReservations.filter((item) => !query || item.name.toLocaleLowerCase("ko-KR").includes(query) || (queryDigits && digits(item.phone).includes(queryDigits))).sort((a, b) => {
+    return monthlyReservations.filter((item) => !query || item.name.toLocaleLowerCase("ko-KR").includes(query) || (queryDigits && digits(item.phone).includes(queryDigits))).sort((a, b) => {
       const aToday = a.confirmed_at && seoulDay(new Date(a.confirmed_at)) === today ? 1 : 0;
       const bToday = b.confirmed_at && seoulDay(new Date(b.confirmed_at)) === today ? 1 : 0;
       return bToday - aToday || new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [branchReservations, search]);
+  }, [monthlyReservations, search]);
 
   const diagnosisByConsultation = useMemo(() => new Map(
     diagnoses.flatMap((diagnosis) => diagnosis.consultation_id ? [[diagnosis.consultation_id, diagnosis] as const] : []),
@@ -674,7 +716,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
     <main className="min-h-dvh bg-[#f4f2ee]">
       <header className="sticky top-0 z-20 bg-[#2b2723] px-5 py-4 text-white shadow-sm">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 sm:gap-4">
-          <div><h1 className="text-base font-extrabold sm:text-lg">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">{branchFilter} · 예약 {branchReservations.length}건 · 상담 {branchRecords.length}건 · 동의서 {branchConsents.length}건 · 보컬 진단서 {branchDiagnoses.length}건</p></div>
+          <div><h1 className="text-base font-extrabold sm:text-lg">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">{branchFilter} · {monthKeyLabel(monthKey)} · 예약 {monthlyReservations.length}건 · 상담 {monthlyRecords.length}건 · 등록완료 {monthlyRecords.filter((record) => record.status === "등록").length}건 · 보컬 진단서 {monthlyDiagnoses.length}건</p></div>
           <div className="flex flex-wrap gap-2">
             {lockedBranch ? (
               <span className="flex min-h-12 items-center rounded-xl border border-[#6b6459] px-3 text-sm font-bold text-[#d8d2c8]">{lockedBranch}</span>
@@ -692,10 +734,20 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
       </header>
 
       <div className="mx-auto max-w-5xl p-4 sm:p-6">
+        <div className="mb-4 flex items-center justify-between rounded-[16px] bg-white p-2 shadow-[0_2px_10px_rgba(0,0,0,0.05)]" aria-label="월 선택">
+          <button type="button" aria-label="이전 달" onClick={() => setMonthKey(shiftMonthKey(monthKey, -1))} className="min-h-12 min-w-12 rounded-xl bg-[#eee9e0] text-lg font-black text-[#4a453d]">◀</button>
+          <div className="flex items-center gap-2">
+            <p className="text-lg font-black">{monthKeyLabel(monthKey)}</p>
+            {monthKey !== currentMonthKey ? (
+              <button type="button" onClick={() => setMonthKey(currentMonthKey)} className="min-h-10 rounded-xl bg-[#e8a23d] px-3 text-xs font-black text-[#2b2723]">이번 달로</button>
+            ) : null}
+          </div>
+          <button type="button" aria-label="다음 달" onClick={() => setMonthKey(shiftMonthKey(monthKey, 1))} className="min-h-12 min-w-12 rounded-xl bg-[#eee9e0] text-lg font-black text-[#4a453d]">▶</button>
+        </div>
         <div className="mb-4 grid grid-cols-3 gap-2 rounded-[16px] bg-[#ded8cf] p-2" aria-label="관리 화면 선택">
-          <button type="button" aria-pressed={view === "reservations"} onClick={() => setView("reservations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "reservations" ? "bg-white text-[#b76e08] shadow-sm" : "text-[#6b6459]"}`}>상담 예약 ({branchReservations.length})</button>
+          <button type="button" aria-pressed={view === "reservations"} onClick={() => setView("reservations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "reservations" ? "bg-white text-[#b76e08] shadow-sm" : "text-[#6b6459]"}`}>상담 예약 ({monthlyReservations.length})</button>
           <button type="button" aria-pressed={view === "consultations"} onClick={() => setView("consultations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "consultations" ? "bg-white text-[#2b2723] shadow-sm" : "text-[#6b6459]"}`}>상담 목록</button>
-          <button type="button" aria-pressed={view === "diagnoses"} onClick={() => setView("diagnoses")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "diagnoses" ? "bg-white text-violet-800 shadow-sm" : "text-[#6b6459]"}`}>보컬 진단서 ({branchDiagnoses.length})</button>
+          <button type="button" aria-pressed={view === "diagnoses"} onClick={() => setView("diagnoses")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "diagnoses" ? "bg-white text-violet-800 shadow-sm" : "text-[#6b6459]"}`}>보컬 진단서 ({monthlyDiagnoses.length})</button>
         </div>
 
         <section className="rounded-[18px] bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.05)] sm:p-5">
@@ -705,10 +757,17 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
               <input id="admin-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} className="min-h-12 w-full rounded-xl border-[1.5px] border-[#d8d2c8] bg-[#faf9f6] px-4 focus:border-[#e8a23d] focus:bg-white focus:outline-none" placeholder={view === "diagnoses" ? "진단서 학생 이름 검색" : "이름 또는 전화번호 뒷자리 검색"} />
             </div>
             {view === "consultations" ? (
-              <div className="flex gap-2" aria-label="카드 종류 필터">
+              <div className="flex flex-wrap gap-2" aria-label="카드 종류 필터">
                 {(["전체", "일반", "입시"] as CardFilter[]).map((filter) => (
                   <button key={filter} type="button" aria-pressed={cardFilter === filter} onClick={() => setCardFilter(filter)} className={`min-h-12 rounded-xl px-4 text-sm font-bold ${cardFilter === filter ? "bg-[#2b2723] text-white" : "bg-[#eee9e0] text-[#4a453d]"}`}>{filter}</button>
                 ))}
+                {(["미등록", "등록완료"] as const).map((filter) => {
+                  const count = monthlyRecords.filter((record) => (filter === "등록완료" ? record.status === "등록" : record.status !== "등록")).length;
+                  const active = registrationFilter === filter;
+                  return (
+                    <button key={filter} type="button" aria-pressed={active} onClick={() => setRegistrationFilter(active ? "전체" : filter)} className={`min-h-12 rounded-xl px-4 text-sm font-bold ${active ? filter === "등록완료" ? "bg-emerald-600 text-white" : "bg-amber-600 text-white" : filter === "등록완료" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900"}`}>{filter} ({count})</button>
+                  );
+                })}
               </div>
             ) : null}
             <button type="button" onClick={() => void Promise.all([loadConsultations(), loadReservations(), loadDiagnoses(), loadConsents(), loadConsentRequests()])} disabled={loading || reservationsLoading || diagnosesLoading || consentsLoading || requestsLoading} className="min-h-12 rounded-xl bg-[#e8a23d] px-4 text-sm font-extrabold text-[#2b2723] disabled:opacity-60">{loading || reservationsLoading || diagnosesLoading || consentsLoading || requestsLoading ? "불러오는 중…" : "새로고침"}</button>
@@ -761,7 +820,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
               return <article key={reservation.id} className={`rounded-[18px] p-4 shadow-[0_2px_10px_rgba(0,0,0,0.05)] sm:p-5 ${todayConfirmed ? "border-2 border-[#e8a23d] bg-amber-50" : "bg-white"}`}>
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-[230px] flex-1">
-                    <div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-black">{reservation.name}</h2>{todayConfirmed ? <span className="rounded-full bg-[#e8a23d] px-2.5 py-1 text-xs font-black text-[#2b2723]">오늘 상담</span> : null}<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${reservation.status === "상담완료" ? "bg-emerald-100 text-emerald-800" : reservation.status === "확정" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"}`}>{reservation.status}</span><span className="rounded-full bg-[#eee9e0] px-2.5 py-1 text-xs font-bold text-[#5a5349]">{reservation.source === "link" ? "링크" : reservation.source === "tablet" ? "현장" : "직접"}</span><span className="rounded-full bg-[#f3efe7] px-2.5 py-1 text-xs font-semibold text-[#9a9389]">{reservation.branch_name || DEFAULT_BRANCH}</span></div>
+                    <div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-black">{reservation.name}</h2>{todayConfirmed ? <span className="rounded-full bg-[#e8a23d] px-2.5 py-1 text-xs font-black text-[#2b2723]">오늘 상담</span> : null}{monthOfIso(reservation.created_at) !== monthKey ? <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-black text-violet-800">지난달 접수 이월</span> : null}<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${reservation.status === "상담완료" ? "bg-emerald-100 text-emerald-800" : reservation.status === "확정" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"}`}>{reservation.status}</span><span className="rounded-full bg-[#eee9e0] px-2.5 py-1 text-xs font-bold text-[#5a5349]">{reservation.source === "link" ? "링크" : reservation.source === "tablet" ? "현장" : "직접"}</span><span className="rounded-full bg-[#f3efe7] px-2.5 py-1 text-xs font-semibold text-[#9a9389]">{reservation.branch_name || DEFAULT_BRANCH}</span></div>
                     <p className="mt-2 text-sm font-semibold text-[#4a453d]">{reservation.phone} · {reservation.gender} · {reservation.birth_date}</p>
                     <p className="mt-1 text-sm text-[#6b6459]">{reservation.lesson_type} · {reservation.subjects.join(", ")}</p>
                     <div className="mt-3 rounded-xl bg-white/80 p-3 text-sm leading-6 text-[#5f584e]">{reservation.schedule_preferences.map((item) => item.days?.length || item.day || item.timeSlot || item.timeText ? <p key={item.rank}><strong>{item.rank}순위</strong> · {reservationScheduleLabel(item)}</p> : null)}{reservation.schedule_note ? <p className="mt-2 border-t border-[#ded8cf] pt-2"><strong>참고</strong> · {reservation.schedule_note}</p> : null}</div>
