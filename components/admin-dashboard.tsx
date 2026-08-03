@@ -213,6 +213,7 @@ function ReservationConfirmEditor({ record, busy, options, onSave }: { record: R
 export function AdminDashboard({ initialView = "consultations" }: { initialView?: AdminView }) {
   const [auth, setAuth] = useState<AuthState>("checking");
   const [crmOptions, setCrmOptions] = useState<CrmScheduleOptions | null>(null);
+  const [branchFilter, setBranchFilter] = useState<string>(DEFAULT_BRANCH);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
@@ -357,19 +358,51 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch("/api/admin/crm-options", { cache: "no-store" });
+        const response = await fetch(`/api/admin/crm-options?branch=${encodeURIComponent(branchFilter)}`, { cache: "no-store" });
         if (!response.ok || cancelled) return;
         const data = await response.json() as CrmScheduleOptions;
-        if (!cancelled) setCrmOptions({ teachers: data.teachers || [], rooms: data.rooms || [] });
+        if (!cancelled) {
+          setCrmOptions({
+            teachers: data.teachers || [],
+            rooms: data.rooms || [],
+            teacherSubjects: data.teacherSubjects || {},
+            busySlots: data.busySlots || []
+          });
+        }
       } catch { /* 목록이 없으면 선택지 없이 표시 */ }
     })();
     return () => { cancelled = true; };
-  }, [auth]);
+  }, [auth, branchFilter]);
+
+  // 모든 목록은 선택된 지점의 데이터만 보여준다 (지점 표시가 없는 예전 데이터는 기본 지점으로 간주)
+  const branchReservations = useMemo(
+    () => reservations.filter((item) => (item.branch_name || DEFAULT_BRANCH) === branchFilter),
+    [reservations, branchFilter]
+  );
+  const branchRecords = useMemo(
+    () => records.filter((item) => (item.branch_name || DEFAULT_BRANCH) === branchFilter),
+    [records, branchFilter]
+  );
+  const branchDiagnoses = useMemo(() => {
+    const recordIds = new Set(branchRecords.map((item) => item.id));
+    return diagnoses.filter((item) => (item.consultation_id ? recordIds.has(item.consultation_id) : (item.branch_name || DEFAULT_BRANCH) === branchFilter));
+  }, [diagnoses, branchRecords, branchFilter]);
+  const branchConsents = useMemo(() => {
+    const recordIds = new Set(branchRecords.map((item) => item.id));
+    return consents.filter((item) => recordIds.has(item.consultation_id));
+  }, [consents, branchRecords]);
+  const branchOptions = useMemo(() => {
+    const names = new Set<string>([DEFAULT_BRANCH]);
+    reservations.forEach((item) => names.add(item.branch_name || DEFAULT_BRANCH));
+    records.forEach((item) => names.add(item.branch_name || DEFAULT_BRANCH));
+    diagnoses.forEach((item) => { if (item.branch_name) names.add(item.branch_name); });
+    return Array.from(names);
+  }, [reservations, records, diagnoses]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ko-KR");
     const queryDigits = digits(query);
-    return records.filter((record) => {
+    return branchRecords.filter((record) => {
       if (cardFilter !== "전체" && record.card_type !== cardFilter) return false;
       if (!query) return true;
       return record.name.toLocaleLowerCase("ko-KR").includes(query)
@@ -378,24 +411,24 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
           || digits(record.parent_phone).includes(queryDigits)
         ));
     });
-  }, [cardFilter, records, search]);
+  }, [cardFilter, branchRecords, search]);
 
   const filteredDiagnoses = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ko-KR");
-    if (!query) return diagnoses;
-    return diagnoses.filter((diagnosis) => diagnosis.student_name.toLocaleLowerCase("ko-KR").includes(query));
-  }, [diagnoses, search]);
+    if (!query) return branchDiagnoses;
+    return branchDiagnoses.filter((diagnosis) => diagnosis.student_name.toLocaleLowerCase("ko-KR").includes(query));
+  }, [branchDiagnoses, search]);
 
   const filteredReservations = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("ko-KR");
     const queryDigits = digits(query);
     const today = seoulDay(new Date());
-    return reservations.filter((item) => !query || item.name.toLocaleLowerCase("ko-KR").includes(query) || (queryDigits && digits(item.phone).includes(queryDigits))).sort((a, b) => {
+    return branchReservations.filter((item) => !query || item.name.toLocaleLowerCase("ko-KR").includes(query) || (queryDigits && digits(item.phone).includes(queryDigits))).sort((a, b) => {
       const aToday = a.confirmed_at && seoulDay(new Date(a.confirmed_at)) === today ? 1 : 0;
       const bToday = b.confirmed_at && seoulDay(new Date(b.confirmed_at)) === today ? 1 : 0;
       return bToday - aToday || new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [reservations, search]);
+  }, [branchReservations, search]);
 
   const diagnosisByConsultation = useMemo(() => new Map(
     diagnoses.flatMap((diagnosis) => diagnosis.consultation_id ? [[diagnosis.consultation_id, diagnosis] as const] : []),
@@ -641,21 +674,23 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
     <main className="min-h-dvh bg-[#f4f2ee]">
       <header className="sticky top-0 z-20 bg-[#2b2723] px-5 py-4 text-white shadow-sm">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 sm:gap-4">
-          <div><h1 className="text-base font-extrabold sm:text-lg">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">예약 {reservations.length}건 · 상담 {records.length}건 · 동의서 {consents.length}건 · 보컬 진단서 {diagnoses.length}건</p></div>
+          <div><h1 className="text-base font-extrabold sm:text-lg">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">{branchFilter} · 예약 {branchReservations.length}건 · 상담 {branchRecords.length}건 · 동의서 {branchConsents.length}건 · 보컬 진단서 {branchDiagnoses.length}건</p></div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/consult" className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link>
+            <select aria-label="지점 선택" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)} className="min-h-12 rounded-xl border border-[#6b6459] bg-[#2b2723] px-3 text-sm font-bold text-white">
+              {branchOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <Link href={`/consult?branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link>
             <button type="button" onClick={() => setDiagnosisEditor({ diagnosis: null, consultation: null })} className="min-h-12 rounded-xl bg-violet-100 px-3.5 text-sm font-extrabold text-violet-900">새 진단서</button>
             <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-white px-3.5 text-sm font-extrabold text-[#2b2723]">상담 링크 보내기</button>
-            <button type="button" onClick={logout} className="min-h-12 rounded-xl border border-[#6b6459] px-3.5 text-sm font-bold">로그아웃</button>
           </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-5xl p-4 sm:p-6">
         <div className="mb-4 grid grid-cols-3 gap-2 rounded-[16px] bg-[#ded8cf] p-2" aria-label="관리 화면 선택">
-          <button type="button" aria-pressed={view === "reservations"} onClick={() => setView("reservations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "reservations" ? "bg-white text-[#b76e08] shadow-sm" : "text-[#6b6459]"}`}>상담 예약 ({reservations.length})</button>
+          <button type="button" aria-pressed={view === "reservations"} onClick={() => setView("reservations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "reservations" ? "bg-white text-[#b76e08] shadow-sm" : "text-[#6b6459]"}`}>상담 예약 ({branchReservations.length})</button>
           <button type="button" aria-pressed={view === "consultations"} onClick={() => setView("consultations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "consultations" ? "bg-white text-[#2b2723] shadow-sm" : "text-[#6b6459]"}`}>상담 목록</button>
-          <button type="button" aria-pressed={view === "diagnoses"} onClick={() => setView("diagnoses")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "diagnoses" ? "bg-white text-violet-800 shadow-sm" : "text-[#6b6459]"}`}>보컬 진단서 ({diagnoses.length})</button>
+          <button type="button" aria-pressed={view === "diagnoses"} onClick={() => setView("diagnoses")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "diagnoses" ? "bg-white text-violet-800 shadow-sm" : "text-[#6b6459]"}`}>보컬 진단서 ({branchDiagnoses.length})</button>
         </div>
 
         <section className="rounded-[18px] bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.05)] sm:p-5">
@@ -770,7 +805,7 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
       </div>
 
       {selected ? <ConsultationDetail record={selected} reservation={selected.reservation_id ? reservationById.get(selected.reservation_id) : undefined} diagnosis={diagnosisByConsultation.get(selected.id)} consent={consentByConsultation.get(selected.id)} consentRequest={latestRequestByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id || deletingKey === `consultation:${selected.id}`} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onConsent={() => { const consent = consentByConsultation.get(selected.id); if (consent) setConsentViewer({ consentId: consent.id, consultation: selected }); }} onSignatureLink={() => { setSignatureRecord(selected); setSelected(null); }} onRecordUpdate={(record) => { setRecords((current) => current.map((item) => item.id === record.id ? record : item)); setSelected(record); }} onStatus={(status) => void updateStatus(selected, status)} onDelete={() => void deleteRecord("consultation", selected.id, selected.name)} /> : null}
-      {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} /> : null}
+      {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} branchName={branchFilter} /> : null}
       {diagnosisEditor ? <VocalDiagnosisEditor initialDiagnosis={diagnosisEditor.diagnosis} consultation={diagnosisEditor.consultation} onClose={() => setDiagnosisEditor(null)} onSaved={upsertDiagnosis} /> : null}
       {registrationRecord ? <RegistrationConsentFlow consultation={registrationRecord} onClose={() => setRegistrationRecord(null)} onComplete={completeRegistration} /> : null}
       {consentViewer ? <ConsentDetailModal consentId={consentViewer.consentId} consultation={consentViewer.consultation} onClose={() => setConsentViewer(null)} /> : null}

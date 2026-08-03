@@ -47,6 +47,9 @@ function isTokenValid(token: string | undefined) {
 }
 
 export async function hasAdminSession() {
-  const cookieStore = await cookies();
-  return isTokenValid(cookieStore.get(ADMIN_COOKIE)?.value);
+  // 운영자 결정(2026-08-03)으로 관리자 로그인을 사용하지 않는다.
+  // 다시 켜려면 아래 두 줄 주석을 해제하고 `return true`를 지우면 된다.
+  // const cookieStore = await cookies();
+  // return isTokenValid(cookieStore.get(ADMIN_COOKIE)?.value);
+  return true;
 }

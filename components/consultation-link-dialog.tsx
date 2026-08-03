@@ -31,11 +31,12 @@ async function writeClipboard(text: string) {
   }
 }
 
-export function ConsultationLinkDialog({ onClose }: { onClose: () => void }) {
+export function ConsultationLinkDialog({ onClose, branchName }: { onClose: () => void; branchName?: string }) {
   const [copyState, setCopyState] = useState<CopyState>("idle");
+  const branchQuery = branchName ? `&branch=${encodeURIComponent(branchName)}` : "";
   const link = typeof window === "undefined"
-    ? "/reserve?src=link"
-    : `${window.location.origin}/reserve?src=link`;
+    ? `/reserve?src=link${branchQuery}`
+    : `${window.location.origin}/reserve?src=link${branchQuery}`;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
