@@ -241,7 +241,8 @@ function ReservationConfirmEditor({ record, busy, options, onSave }: { record: R
   </div>;
 }
 
-export function AdminDashboard({ initialView = "consultations", lockedBranch }: { initialView?: AdminView; lockedBranch?: string }) {
+export function AdminDashboard({ initialView = "consultations", lockedBranch, lockedTeacher }: { initialView?: AdminView; lockedBranch?: string; lockedTeacher?: string }) {
+  const teacherMode = Boolean(lockedTeacher);
   const [auth, setAuth] = useState<AuthState>("checking");
   const [crmOptions, setCrmOptions] = useState<CrmScheduleOptions | null>(null);
   const [branchFilter, setBranchFilter] = useState<string>(lockedBranch || DEFAULT_BRANCH);
@@ -409,18 +410,31 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
   }, [auth, branchFilter]);
 
   // 모든 목록은 선택된 지점의 데이터만 보여준다 (지점 표시가 없는 예전 데이터는 기본 지점으로 간주)
+  // 강사 모드(lockedTeacher)에서는 그 강사에게 체험수업이 배정된 학생만 보인다
+  const reservationMatchesTeacher = (item: ReservationRecord) => (
+    !lockedTeacher
+    || item.trial_teacher === lockedTeacher
+    || (Array.isArray(item.trial_slots) && item.trial_slots.some((slot) => slot.teacher === lockedTeacher))
+  );
   const branchReservations = useMemo(
-    () => reservations.filter((item) => (item.branch_name || DEFAULT_BRANCH) === branchFilter),
-    [reservations, branchFilter]
+    () => reservations.filter((item) => (item.branch_name || DEFAULT_BRANCH) === branchFilter && reservationMatchesTeacher(item)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reservations, branchFilter, lockedTeacher]
   );
-  const branchRecords = useMemo(
-    () => records.filter((item) => (item.branch_name || DEFAULT_BRANCH) === branchFilter),
-    [records, branchFilter]
-  );
+  const branchRecords = useMemo(() => {
+    const scoped = records.filter((item) => (item.branch_name || DEFAULT_BRANCH) === branchFilter);
+    if (!lockedTeacher) return scoped;
+    const myReservationIds = new Set(branchReservations.map((item) => item.id));
+    return scoped.filter((item) => item.reservation_id && myReservationIds.has(item.reservation_id));
+  }, [records, branchFilter, lockedTeacher, branchReservations]);
   const branchDiagnoses = useMemo(() => {
     const recordIds = new Set(branchRecords.map((item) => item.id));
-    return diagnoses.filter((item) => (item.consultation_id ? recordIds.has(item.consultation_id) : (item.branch_name || DEFAULT_BRANCH) === branchFilter));
-  }, [diagnoses, branchRecords, branchFilter]);
+    return diagnoses.filter((item) => (
+      item.consultation_id
+        ? recordIds.has(item.consultation_id)
+        : !lockedTeacher && (item.branch_name || DEFAULT_BRANCH) === branchFilter
+    ));
+  }, [diagnoses, branchRecords, branchFilter, lockedTeacher]);
   const branchConsents = useMemo(() => {
     const recordIds = new Set(branchRecords.map((item) => item.id));
     return consents.filter((item) => recordIds.has(item.consultation_id));
@@ -751,10 +765,13 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
                 {branchOptions.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
             )}
-            <Link href={`/reserve?src=crm&branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-sky-100 px-3.5 text-sm font-extrabold text-sky-900">새 상담 예약</Link>
-            <Link href={`/consult?branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link>
+            {lockedTeacher ? (
+              <span className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3 text-sm font-black text-[#2b2723]">{lockedTeacher} 강사 · 내 배정 학생</span>
+            ) : null}
+            {!teacherMode ? <Link href={`/reserve?src=crm&branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-sky-100 px-3.5 text-sm font-extrabold text-sky-900">새 상담 예약</Link> : null}
+            {!teacherMode ? <Link href={`/consult?branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link> : null}
             <button type="button" onClick={() => setDiagnosisEditor({ diagnosis: null, consultation: null })} className="min-h-12 rounded-xl bg-violet-100 px-3.5 text-sm font-extrabold text-violet-900">새 진단서</button>
-            <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-white px-3.5 text-sm font-extrabold text-[#2b2723]">상담 링크 보내기</button>
+            {!teacherMode ? <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-white px-3.5 text-sm font-extrabold text-[#2b2723]">상담 링크 보내기</button> : null}
           </div>
         </div>
       </header>
@@ -858,7 +875,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
                     <button type="button" onClick={() => setConsentViewer({ consentId: consentByConsultation.get(record.id)!.id, consultation: record })} className="min-h-12 rounded-xl bg-emerald-100 px-4 text-sm font-extrabold text-emerald-900">동의서 보기</button>
                   ) : null}
                   <button type="button" onClick={() => setSelected(record)} className="min-h-12 rounded-xl bg-[#eee9e0] px-4 text-sm font-bold text-[#4a453d]">상세 보기</button>
-                  <button type="button" disabled={updatingId === record.id} onClick={() => void updateStatus(record, record.status === "상담" || !consentByConsultation.has(record.id) ? "등록" : "상담")} className={`min-h-12 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50 ${record.status === "상담" || !consentByConsultation.has(record.id) ? "bg-[#e8a23d] text-[#2b2723]" : "bg-[#2b2723] text-white"}`}>{record.status === "상담" ? "등록으로 변경" : consentByConsultation.has(record.id) ? "상담으로 변경" : "동의서 받기"}</button>
+                  {!teacherMode ? <button type="button" disabled={updatingId === record.id} onClick={() => void updateStatus(record, record.status === "상담" || !consentByConsultation.has(record.id) ? "등록" : "상담")} className={`min-h-12 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50 ${record.status === "상담" || !consentByConsultation.has(record.id) ? "bg-[#e8a23d] text-[#2b2723]" : "bg-[#2b2723] text-white"}`}>{record.status === "상담" ? "등록으로 변경" : consentByConsultation.has(record.id) ? "상담으로 변경" : "동의서 받기"}</button> : null}
                   <button type="button" disabled={deletingKey === `consultation:${record.id}`} onClick={() => void deleteRecord("consultation", record.id, record.name)} className="min-h-12 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `consultation:${record.id}` ? "삭제 중…" : "삭제"}</button>
                 </div>
               </div>
@@ -895,7 +912,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
                   <div className="w-full max-w-sm space-y-3 sm:w-[310px]">
                     <ReservationConfirmEditor key={`${reservation.confirmed_at ?? "empty"}-${JSON.stringify(reservation.trial_slots ?? [])}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`} record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(slots) => void updateReservationSlots(reservation, slots)} />
                     {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button> : <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2b2723] px-4 text-sm font-black text-white">상담 시작 →</Link>}
-                    <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button>
+                    {!teacherMode ? <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button> : null}
                   </div>
                 </div>
               </article>;
