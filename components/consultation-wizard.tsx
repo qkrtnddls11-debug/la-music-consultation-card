@@ -332,7 +332,7 @@ export function ConsultationWizard({ submissionSource, reservationId, branchName
     if (!submitted) return;
     const timer = window.setTimeout(() => {
       if (reservationId) {
-        window.location.assign("/admin?tab=reservations");
+        window.location.assign(`/admin?tab=reservations${branchName ? `&branch=${encodeURIComponent(branchName)}` : ""}`);
         return;
       }
       setDraft(createEmptyDraft(submissionSource, branchName));

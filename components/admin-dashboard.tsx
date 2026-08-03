@@ -210,10 +210,10 @@ function ReservationConfirmEditor({ record, busy, options, onSave }: { record: R
   </div>;
 }
 
-export function AdminDashboard({ initialView = "consultations" }: { initialView?: AdminView }) {
+export function AdminDashboard({ initialView = "consultations", lockedBranch }: { initialView?: AdminView; lockedBranch?: string }) {
   const [auth, setAuth] = useState<AuthState>("checking");
   const [crmOptions, setCrmOptions] = useState<CrmScheduleOptions | null>(null);
-  const [branchFilter, setBranchFilter] = useState<string>(DEFAULT_BRANCH);
+  const [branchFilter, setBranchFilter] = useState<string>(lockedBranch || DEFAULT_BRANCH);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
@@ -676,9 +676,13 @@ export function AdminDashboard({ initialView = "consultations" }: { initialView?
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 sm:gap-4">
           <div><h1 className="text-base font-extrabold sm:text-lg">라 실용음악학원 · 상담 관리</h1><p className="mt-0.5 text-xs text-[#b5aea3]">{branchFilter} · 예약 {branchReservations.length}건 · 상담 {branchRecords.length}건 · 동의서 {branchConsents.length}건 · 보컬 진단서 {branchDiagnoses.length}건</p></div>
           <div className="flex flex-wrap gap-2">
-            <select aria-label="지점 선택" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)} className="min-h-12 rounded-xl border border-[#6b6459] bg-[#2b2723] px-3 text-sm font-bold text-white">
-              {branchOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
+            {lockedBranch ? (
+              <span className="flex min-h-12 items-center rounded-xl border border-[#6b6459] px-3 text-sm font-bold text-[#d8d2c8]">{lockedBranch}</span>
+            ) : (
+              <select aria-label="지점 선택" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)} className="min-h-12 rounded-xl border border-[#6b6459] bg-[#2b2723] px-3 text-sm font-bold text-white">
+                {branchOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            )}
             <Link href={`/consult?branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link>
             <button type="button" onClick={() => setDiagnosisEditor({ diagnosis: null, consultation: null })} className="min-h-12 rounded-xl bg-violet-100 px-3.5 text-sm font-extrabold text-violet-900">새 진단서</button>
             <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-white px-3.5 text-sm font-extrabold text-[#2b2723]">상담 링크 보내기</button>
