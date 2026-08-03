@@ -106,6 +106,7 @@ export type CrmBusySlot = {
   teacher: string;
   student: string;
   subject: string;
+  kind?: string;
 };
 
 // CRM에서 불러오는 체험수업 배정 선택지 (강사·연습실·강사별 과목·시간표)

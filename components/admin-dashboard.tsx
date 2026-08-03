@@ -89,6 +89,13 @@ function monthKeyLabel(key: string) {
   return `${year}년 ${Number(month)}월`;
 }
 
+function formatTrialDateTime(iso?: string | null) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
+}
+
 function datetimeLocalValue(value: string | null) {
   if (!value) return "";
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value));
@@ -147,7 +154,7 @@ function slotsFromRecord(record: ReservationRecord): EditableSlot[] {
   });
 }
 
-function TrialSlotEditor({ slot, options, disabled, idPrefix, onChange }: { slot: EditableSlot; options: CrmScheduleOptions | null; disabled: boolean; idPrefix: string; onChange: (next: EditableSlot) => void }) {
+function TrialSlotEditor({ slot, options, disabled, idPrefix, ownName, onChange }: { slot: EditableSlot; options: CrmScheduleOptions | null; disabled: boolean; idPrefix: string; ownName: string; onChange: (next: EditableSlot) => void }) {
   const [initialDatePart = "", initialTimePart = ""] = slot.atLocal.split("T");
   const [initialYear = "", initialMonth = "", initialDay = ""] = initialDatePart.split("-");
   const [initialHour24 = "", initialMinute = ""] = initialTimePart.split(":");
@@ -170,8 +177,10 @@ function TrialSlotEditor({ slot, options, disabled, idPrefix, onChange }: { slot
   const datePart = /^\d{4}$/.test(year) && month && day ? `${year}-${month}-${day}` : "";
   const startTime = hour24 && minute ? `${hour24}:${minute}` : "";
   const endTime = startTime ? addMinutesToClock(startTime, 50) : "";
-  const dayBusySlots = datePart ? (options?.busySlots || []).filter((busySlot) => busySlot.date === datePart) : [];
+  // 본인(이 예약 학생)의 체험수업은 사용중으로 치지 않는다 — 자기 배정 때문에 강사·연습실이 잠기는 혼동 방지
+  const dayBusySlots = datePart ? (options?.busySlots || []).filter((busySlot) => busySlot.date === datePart && busySlot.student !== ownName) : [];
   const overlapping = startTime ? dayBusySlots.filter((busySlot) => timeRangesOverlap(startTime, endTime, busySlot.start, busySlot.end)) : [];
+  const busyLabel = (busySlot: { start: string; student: string; kind?: string }) => `${busySlot.start} ${busySlot.student} ${busySlot.kind === "체험" ? "체험수업" : "수업"}`;
 
   const subjectTeachers = options?.teacherSubjects && Object.keys(options.teacherSubjects).length > 0
     ? (options.teachers || []).filter((name) => teacherTeachesSubject(slot.subject, options.teacherSubjects?.[name] || ""))
@@ -192,14 +201,14 @@ function TrialSlotEditor({ slot, options, disabled, idPrefix, onChange }: { slot
         <option value="">강사 선택</option>
         {teacherList.map((name) => {
           const teacherBusy = overlapping.find((busySlot) => busySlot.teacher === name);
-          return <option key={name} value={name} disabled={Boolean(teacherBusy) && name !== slot.teacher}>{name}{teacherBusy ? ` (${teacherBusy.start} 수업중)` : ""}</option>;
+          return <option key={name} value={name} disabled={Boolean(teacherBusy) && name !== slot.teacher}>{name}{teacherBusy ? ` (${busyLabel(teacherBusy)})` : ""}</option>;
         })}
       </select>
       <select aria-label={`${slot.subject} 체험 연습실`} value={slot.room} onChange={(event) => onChange({ ...slot, room: event.target.value })} disabled={disabled} className={selectClass}>
         <option value="">연습실 선택</option>
         {roomList.map((name) => {
           const occupant = overlapping.find((busySlot) => busySlot.room === name);
-          return <option key={name} value={name} disabled={Boolean(occupant) && name !== slot.room}>{name}{occupant ? ` (${occupant.teacher} ${occupant.start} 수업중)` : ""}</option>;
+          return <option key={name} value={name} disabled={Boolean(occupant) && name !== slot.room}>{name}{occupant ? ` (${busyLabel(occupant)})` : ""}</option>;
         })}
       </select>
     </div>
@@ -222,6 +231,7 @@ function ReservationConfirmEditor({ record, busy, options, onSave }: { record: R
           options={options}
           disabled={disabled}
           idPrefix={`reservation-slot-${record.id}-${index}`}
+          ownName={record.name}
           onChange={(next) => setSlots((current) => current.map((item, itemIndex) => (itemIndex === index ? next : item)))}
         />
       ))}
@@ -821,9 +831,22 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-[230px] flex-1">
                     <div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-black">{reservation.name}</h2>{todayConfirmed ? <span className="rounded-full bg-[#e8a23d] px-2.5 py-1 text-xs font-black text-[#2b2723]">오늘 상담</span> : null}{monthOfIso(reservation.created_at) !== monthKey ? <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-black text-violet-800">지난달 접수 이월</span> : null}<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${reservation.status === "상담완료" ? "bg-emerald-100 text-emerald-800" : reservation.status === "확정" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"}`}>{reservation.status}</span><span className="rounded-full bg-[#eee9e0] px-2.5 py-1 text-xs font-bold text-[#5a5349]">{reservation.source === "link" ? "링크" : reservation.source === "tablet" ? "현장" : "직접"}</span><span className="rounded-full bg-[#f3efe7] px-2.5 py-1 text-xs font-semibold text-[#9a9389]">{reservation.branch_name || DEFAULT_BRANCH}</span></div>
-                    <p className="mt-2 text-sm font-semibold text-[#4a453d]">{reservation.phone} · {reservation.gender} · {reservation.birth_date}</p>
-                    <p className="mt-1 text-sm text-[#6b6459]">{reservation.lesson_type} · {reservation.subjects.join(", ")}</p>
+                    <p className="mt-2 text-sm font-semibold text-[#4a453d]">{[reservation.phone, reservation.gender, reservation.birth_date].filter(Boolean).join(" · ")}</p>
+                    <p className="mt-1 text-sm text-[#6b6459]">{[reservation.lesson_type, reservation.subjects.join(", ")].filter(Boolean).join(" · ")}</p>
                     <div className="mt-3 rounded-xl bg-white/80 p-3 text-sm leading-6 text-[#5f584e]">{reservation.schedule_preferences.map((item) => item.days?.length || item.day || item.timeSlot || item.timeText ? <p key={item.rank}><strong>{item.rank}순위</strong> · {reservationScheduleLabel(item)}</p> : null)}{reservation.schedule_note ? <p className="mt-2 border-t border-[#ded8cf] pt-2"><strong>참고</strong> · {reservation.schedule_note}</p> : null}</div>
+                    {(reservation.trial_slots?.length || reservation.confirmed_at) ? (
+                      <div className="mt-3 rounded-xl border-[1.5px] border-[#e8a23d]/70 bg-amber-50 p-3 text-sm leading-7">
+                        <p className="font-black text-[#b76e08]">🎯 체험수업 배정</p>
+                        {(reservation.trial_slots?.length
+                          ? reservation.trial_slots
+                          : [{ subject: reservation.subjects[0] || "체험", at: reservation.confirmed_at, teacher: reservation.trial_teacher || "", room: reservation.trial_room || "" }]
+                        ).map((slot) => (
+                          <p key={slot.subject} className="font-bold text-[#4a453d]">
+                            {[slot.subject, formatTrialDateTime(slot.at), slot.teacher && `${slot.teacher} 강사`, slot.room].filter(Boolean).join(" · ") || "일시 미정"}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
                     <p className="mt-2 text-xs text-[#9a9389]">접수 {formatCreatedAt(reservation.created_at)}</p>
                   </div>
                   <div className="w-full max-w-sm space-y-3 sm:w-[310px]">
