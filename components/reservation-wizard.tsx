@@ -94,11 +94,17 @@ export function ReservationWizard({ source, branchName }: { source: ReservationS
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "예약 정보를 저장하지 못했습니다.");
       setSubmitted(true);
+      if (source === "crm") {
+        // 직접 입력(전화 접수)은 저장 후 관리자 예약 목록으로 자동 복귀
+        window.setTimeout(() => {
+          window.location.assign(`/admin?tab=reservations${branchName ? `&branch=${encodeURIComponent(branchName)}` : ""}`);
+        }, 1500);
+      }
     } catch (error) { setSubmitError(error instanceof Error ? error.message : "예약 정보를 저장하지 못했습니다."); }
     finally { setSubmitting(false); }
   }
 
-  if (submitted) return <main className="flex min-h-dvh items-center justify-center bg-[#f4f2ee] p-4"><section className="w-full max-w-[620px] rounded-[22px] bg-white px-6 py-12 text-center shadow-sm"><div className="mx-auto flex size-20 items-center justify-center rounded-full bg-[#e8a23d] text-4xl font-black">✓</div><h1 className="mt-6 text-2xl font-black">예약 정보가 접수되었습니다</h1><p className="mt-4 break-keep text-base font-semibold leading-7 text-[#6b6459]">확인 후 빠르게 일정을 잡아드릴게요.<br />선생님 스케줄에 따라 조정될 수 있는 점 양해 부탁드립니다.</p></section></main>;
+  if (submitted) return <main className="flex min-h-dvh items-center justify-center bg-[#f4f2ee] p-4"><section className="w-full max-w-[620px] rounded-[22px] bg-white px-6 py-12 text-center shadow-sm"><div className="mx-auto flex size-20 items-center justify-center rounded-full bg-[#e8a23d] text-4xl font-black">✓</div><h1 className="mt-6 text-2xl font-black">{source === "crm" ? "예약이 접수되었습니다" : "예약 정보가 접수되었습니다"}</h1><p className="mt-4 break-keep text-base font-semibold leading-7 text-[#6b6459]">{source === "crm" ? "잠시 후 관리자 예약 목록으로 돌아갑니다." : <>확인 후 빠르게 일정을 잡아드릴게요.<br />선생님 스케줄에 따라 조정될 수 있는 점 양해 부탁드립니다.</>}</p></section></main>;
 
   return <main className="flex min-h-dvh max-h-dvh flex-col overflow-hidden bg-[#f4f2ee]">
     <header className="shrink-0 bg-[#2b2723] px-4 py-3.5 text-white"><div className="mx-auto flex max-w-[680px] items-center justify-between"><h1 className="font-extrabold">라 실용음악학원 · 상담 예약</h1><span className="rounded-full bg-[#e8a23d] px-2.5 py-1 text-xs font-black text-[#2b2723]">모바일 예약</span></div></header>
