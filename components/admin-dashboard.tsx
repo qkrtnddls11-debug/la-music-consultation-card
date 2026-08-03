@@ -515,7 +515,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
   async function deleteRecord(target: DeleteTarget, id: string, name: string) {
     const label = target === "consultation" ? "상담 기록" : target === "reservation" ? "상담 예약" : "보컬 진단서";
     const linkedNotice = target === "consultation"
-      ? "\n연결된 동의서·서명 요청도 함께 삭제됩니다. 보컬 진단서는 남고 상담 연결만 해제됩니다."
+      ? "\n연결된 동의서·서명 요청·보컬 진단서도 함께 삭제됩니다."
       : target === "reservation"
         ? "\n이미 작성된 상담 기록은 삭제되지 않고 예약 연결만 해제됩니다."
         : "";
@@ -541,7 +541,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
       } else if (target === "consultation") {
         const deleted = records.find((item) => item.id === id);
         setRecords((current) => current.filter((item) => item.id !== id));
-        setDiagnoses((current) => current.map((item) => item.consultation_id === id ? { ...item, consultation_id: null } : item));
+        setDiagnoses((current) => current.filter((item) => item.consultation_id !== id));
         setConsents((current) => current.filter((item) => item.consultation_id !== id));
         setConsentRequests((current) => current.filter((item) => item.consultation_id !== id));
         if (deleted?.reservation_id) {

@@ -93,6 +93,10 @@ export async function DELETE(
       if (consentDeleteError) return Response.json({ error: "연결된 동의서를 삭제하지 못했습니다." }, { status: 502 });
     }
 
+    // 연결된 보컬 진단서도 함께 삭제한다 (상담 삭제 전에 실행해야 연결이 끊기기 전 찾을 수 있다)
+    const { error: diagnosisDeleteError } = await supabase.from("vocal_diagnoses").delete().eq("consultation_id", id);
+    if (diagnosisDeleteError) return Response.json({ error: "연결된 보컬 진단서를 삭제하지 못했습니다." }, { status: 502 });
+
     const { data: deleted, error: deleteError } = await supabase
       .from("consultations")
       .delete()
