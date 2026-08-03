@@ -263,6 +263,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
   const [cardFilter, setCardFilter] = useState<CardFilter>("전체");
   const [registrationFilter, setRegistrationFilter] = useState<"전체" | "미등록" | "등록완료">("전체");
   const [monthKey, setMonthKey] = useState(() => seoulMonth(new Date()));
+  const [showPastArchive, setShowPastArchive] = useState(false);
   const [view, setView] = useState<AdminView>(initialView);
   const [renderedAt] = useState(() => Date.now());
   const [selected, setSelected] = useState<ConsultationRecord | null>(null);
@@ -481,6 +482,21 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
       return bToday - aToday || new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   }, [monthlyReservations, search]);
+
+  // 지난 상담 월별 보기: 모든 상담을 월 단위 섹션으로 정리 (검색 적용, 최신 달부터)
+  const archiveGroups = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase("ko-KR");
+    const queryDigits = digits(query);
+    const rows = branchRecords.filter((record) => !query
+      || record.name.toLocaleLowerCase("ko-KR").includes(query)
+      || (queryDigits.length > 0 && (digits(record.student_phone).includes(queryDigits) || digits(record.parent_phone).includes(queryDigits))));
+    const map = new Map<string, ConsultationRecord[]>();
+    rows.forEach((record) => {
+      const key = monthOfIso(record.created_at) || "0000-00";
+      map.set(key, [...(map.get(key) || []), record]);
+    });
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [branchRecords, search]);
 
   const diagnosisByConsultation = useMemo(() => new Map(
     diagnoses.flatMap((diagnosis) => diagnosis.consultation_id ? [[diagnosis.consultation_id, diagnosis] as const] : []),
@@ -778,6 +794,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
                     <button key={filter} type="button" aria-pressed={active} onClick={() => setRegistrationFilter(active ? "전체" : filter)} className={`min-h-12 rounded-xl px-4 text-sm font-bold ${active ? filter === "등록완료" ? "bg-emerald-600 text-white" : "bg-amber-600 text-white" : filter === "등록완료" ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900"}`}>{filter} ({count})</button>
                   );
                 })}
+                <button type="button" aria-pressed={showPastArchive} onClick={() => setShowPastArchive((current) => !current)} className={`min-h-12 rounded-xl px-4 text-sm font-bold ${showPastArchive ? "bg-violet-600 text-white" : "bg-violet-100 text-violet-900"}`}>{showPastArchive ? "이번 달 보기로" : "지난 상담 월별 보기"}</button>
               </div>
             ) : null}
             <button type="button" onClick={() => void Promise.all([loadConsultations(), loadReservations(), loadDiagnoses(), loadConsents(), loadConsentRequests()])} disabled={loading || reservationsLoading || diagnosesLoading || consentsLoading || requestsLoading} className="min-h-12 rounded-xl bg-[#e8a23d] px-4 text-sm font-extrabold text-[#2b2723] disabled:opacity-60">{loading || reservationsLoading || diagnosesLoading || consentsLoading || requestsLoading ? "불러오는 중…" : "새로고침"}</button>
@@ -786,7 +803,33 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch }: 
 
         {loadError ? <p className="mt-4 rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-700" role="alert">{loadError}</p> : null}
 
-        {view === "consultations" ? <section className="mt-4 space-y-3" aria-label="상담 목록">
+        {view === "consultations" && showPastArchive ? <section className="mt-4 space-y-4" aria-label="지난 상담 월별 보기">
+          {archiveGroups.length === 0 ? (
+            <div className="rounded-[18px] bg-white p-10 text-center text-[#8a8378]">상담 기록이 없습니다.</div>
+          ) : null}
+          {archiveGroups.map(([groupMonth, groupRecords]) => (
+            <div key={groupMonth} className="rounded-[18px] bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.05)] sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#eee9e0] pb-3">
+                <h2 className="text-lg font-black">{monthKeyLabel(groupMonth)}</h2>
+                <p className="text-sm font-bold text-[#6b6459]">상담 {groupRecords.length}건 · 등록완료 {groupRecords.filter((record) => record.status === "등록").length}건</p>
+              </div>
+              <div className="mt-1 divide-y divide-[#f3efe7]">
+                {groupRecords.map((record) => (
+                  <button key={record.id} type="button" onClick={() => setSelected(record)} className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 py-2 text-left">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span className="font-extrabold">{record.name}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${record.card_type === "입시" ? "bg-[#dcecf9] text-[#2f6d9f]" : "bg-[#eee9e0] text-[#5a5349]"}`}>{record.card_type}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${record.status === "등록" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{record.status === "등록" ? "등록완료" : "미등록"}</span>
+                    </span>
+                    <span className="text-xs text-[#9a9389]">{formatCreatedAt(record.created_at)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section> : null}
+
+        {view === "consultations" && !showPastArchive ? <section className="mt-4 space-y-3" aria-label="상담 목록">
           {!loading && filtered.length === 0 ? (
             <div className="rounded-[18px] bg-white p-10 text-center text-[#8a8378]">조건에 맞는 상담 카드가 없습니다.</div>
           ) : null}
