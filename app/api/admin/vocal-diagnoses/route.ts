@@ -72,6 +72,39 @@ export async function POST(request: Request) {
       if (existing) {
         return Response.json(existing, { headers: { "Cache-Control": "private, no-store" } });
       }
+
+      // 같은 학생이 미리 직접 작성해 둔 진단서가 있으면 빈 진단서를 새로 만들지 않고
+      // 그 진단서를 이 상담에 연결해 그대로 이어 씁니다.
+      const { data: unlinkedRows, error: unlinkedError } = await supabase
+        .from("vocal_diagnoses")
+        .select("*")
+        .is("consultation_id", null)
+        .eq("student_name", consultation.name)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (unlinkedError) {
+        console.error("unlinked vocal diagnosis query failed", { code: unlinkedError.code, message: unlinkedError.message });
+        return Response.json({ error: "기존 진단서를 확인하지 못했습니다." }, { status: 502 });
+      }
+      const reusable = unlinkedRows?.[0];
+      if (reusable) {
+        const branchName = (consultation as { branch_name?: string | null }).branch_name || null;
+        const { data: linkedDiagnosis, error: linkError } = await supabase
+          .from("vocal_diagnoses")
+          .update({
+            consultation_id: consultationId,
+            ...(branchName ? { branch_name: branchName } : {})
+          })
+          .eq("id", reusable.id)
+          .select("*")
+          .maybeSingle();
+        if (linkError || !linkedDiagnosis) {
+          console.error("vocal diagnosis link failed", { code: linkError?.code, message: linkError?.message });
+          return Response.json({ error: "기존 진단서 연결에 실패했습니다." }, { status: 502 });
+        }
+        return Response.json(linkedDiagnosis, { headers: { "Cache-Control": "private, no-store" } });
+      }
+
       studentName = consultation.name;
       linkedBranchName = (consultation as { branch_name?: string | null }).branch_name || null;
     }
