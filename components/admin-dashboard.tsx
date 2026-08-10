@@ -176,7 +176,8 @@ function TrialSlotEditor({ slot, options, disabled, idPrefix, ownName, onChange 
   const hour24 = toTwentyFourHour(period, hour);
   const datePart = /^\d{4}$/.test(year) && month && day ? `${year}-${month}-${day}` : "";
   const startTime = hour24 && minute ? `${hour24}:${minute}` : "";
-  const endTime = startTime ? addMinutesToClock(startTime, 50) : "";
+  // 체험수업은 30분 단위 — 강사가 체험 직후 정각/30분에 다음 수업에 들어갈 수 있다
+  const endTime = startTime ? addMinutesToClock(startTime, 30) : "";
   // 본인(이 예약 학생)의 체험수업은 사용중으로 치지 않는다 — 자기 배정 때문에 강사·연습실이 잠기는 혼동 방지
   const dayBusySlots = datePart ? (options?.busySlots || []).filter((busySlot) => busySlot.date === datePart && busySlot.student !== ownName) : [];
   const overlapping = startTime ? dayBusySlots.filter((busySlot) => timeRangesOverlap(startTime, endTime, busySlot.start, busySlot.end)) : [];
@@ -194,7 +195,7 @@ function TrialSlotEditor({ slot, options, disabled, idPrefix, ownName, onChange 
     <div className="mt-1.5 grid grid-cols-3 gap-1.5">
       <select aria-label={`${slot.subject} 오전 또는 오후`} value={period} onChange={(event) => { setPeriod(event.target.value); emitDateTime(year, month, day, event.target.value, hour, minute); }} disabled={disabled} className={selectClass}><option value="">오전/오후</option><option value="오전">오전</option><option value="오후">오후</option></select>
       <select aria-label={`${slot.subject} 시`} value={hour} onChange={(event) => { setHour(event.target.value); emitDateTime(year, month, day, period, event.target.value, minute); }} disabled={disabled} className={selectClass}><option value="">시</option>{Array.from({ length: 12 }, (_, index) => String(index + 1).padStart(2, "0")).map((item) => <option key={item} value={item}>{Number(item)}시</option>)}</select>
-      <select aria-label={`${slot.subject} 분`} value={minute} onChange={(event) => { setMinute(event.target.value); emitDateTime(year, month, day, period, hour, event.target.value); }} disabled={disabled} className={selectClass}><option value="">분</option>{["00", "10", "20", "30", "40", "50"].map((item) => <option key={item} value={item}>{item}분</option>)}</select>
+      <select aria-label={`${slot.subject} 분`} value={minute} onChange={(event) => { setMinute(event.target.value); emitDateTime(year, month, day, period, hour, event.target.value); }} disabled={disabled} className={selectClass}><option value="">분</option>{["00", "30"].map((item) => <option key={item} value={item}>{item}분</option>)}</select>
     </div>
     <div className="mt-1.5 grid grid-cols-2 gap-1.5">
       <select aria-label={`${slot.subject} 체험 강사`} value={slot.teacher} onChange={(event) => onChange({ ...slot, teacher: event.target.value })} disabled={disabled} className={selectClass}>
