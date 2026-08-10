@@ -23,7 +23,7 @@ import { DEFAULT_BRANCH } from "@/lib/types";
 
 type AuthState = "checking" | "signed-out" | "signed-in";
 type CardFilter = "전체" | "일반" | "입시";
-type AdminView = "consultations" | "reservations" | "diagnoses";
+type AdminView = "consultations" | "reservations" | "inprogress" | "diagnoses";
 type DeleteTarget = "consultation" | "reservation" | "diagnosis";
 type DiagnosisEditorState = {
   diagnosis: VocalDiagnosisRecord | null;
@@ -240,6 +240,20 @@ function ReservationConfirmEditor({ record, busy, options, onSave }: { record: R
     {options && options.teachers.length === 0 ? <p className="mt-1 text-xs font-semibold text-[#9a9389]">강사 목록은 CRM 상담관리 화면을 한 번 열면 채워져요</p> : null}
     <button type="button" disabled={disabled || unchanged || !hasAnySchedule} onClick={() => onSave(slots)} className="mt-2 min-h-12 w-full rounded-xl bg-[#e8a23d] px-4 text-sm font-black text-[#2b2723] disabled:bg-[#eee9e0] disabled:text-[#9a9389]">{busy ? "저장 중…" : "체험수업 배정 저장"}</button>
   </div>;
+}
+
+// 상담 파이프라인 단계: 예약(배정 전) → 상담중(체험·강사 확정) → 완료(체험수업 30분이 지났거나 상담 카드 작성됨)
+type ReservationStage = "예약" | "상담중" | "완료";
+const TRIAL_LESSON_MINUTES = 30;
+function reservationStageOf(item: ReservationRecord, now: number): ReservationStage {
+  if (item.status === "상담완료") return "완료";
+  const slots = (item.trial_slots || []).filter((slot) => slot.at);
+  const assignedTimes = slots.length > 0
+    ? slots.filter((slot) => slot.teacher).map((slot) => slot.at as string)
+    : item.confirmed_at && item.trial_teacher ? [item.confirmed_at] : [];
+  if (assignedTimes.length === 0) return "예약";
+  const lastEnd = Math.max(...assignedTimes.map((at) => new Date(at).getTime())) + TRIAL_LESSON_MINUTES * 60 * 1000;
+  return now >= lastEnd ? "완료" : "상담중";
 }
 
 export function AdminDashboard({ initialView = "consultations", lockedBranch, lockedTeacher }: { initialView?: AdminView; lockedBranch?: string; lockedTeacher?: string }) {
@@ -497,6 +511,27 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
       return bToday - aToday || new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   }, [monthlyReservations, search]);
+
+  // 파이프라인 단계별 분류 (검색 반영된 목록)
+  const stagedReservations = useMemo(() => {
+    const groups: Record<ReservationStage, ReservationRecord[]> = { "예약": [], "상담중": [], "완료": [] };
+    filteredReservations.forEach((item) => { groups[reservationStageOf(item, renderedAt)].push(item); });
+    return groups;
+  }, [filteredReservations, renderedAt]);
+  const completedPendingReservations = useMemo(
+    () => stagedReservations["완료"].filter((item) => !consultationByReservation.has(item.id)),
+    [stagedReservations, consultationByReservation]
+  );
+  // 탭 숫자용 (검색과 무관하게 이번 달 전체 기준)
+  const monthlyStageCounts = useMemo(() => {
+    const counts = { "예약": 0, "상담중": 0, "완료": 0, pendingCompleted: 0 };
+    monthlyReservations.forEach((item) => {
+      const stage = reservationStageOf(item, renderedAt);
+      counts[stage] += 1;
+      if (stage === "완료" && !consultationByReservation.has(item.id)) counts.pendingCompleted += 1;
+    });
+    return counts;
+  }, [monthlyReservations, consultationByReservation, renderedAt]);
 
   // 지난 상담 월별 보기: 모든 상담을 월 단위 섹션으로 정리 (검색 적용, 최신 달부터)
   const archiveGroups = useMemo(() => {
@@ -788,9 +823,10 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
           </div>
           <button type="button" aria-label="다음 달" onClick={() => setMonthKey(shiftMonthKey(monthKey, 1))} className="min-h-12 min-w-12 rounded-xl bg-[#eee9e0] text-lg font-black text-[#4a453d]">▶</button>
         </div>
-        <div className="mb-4 grid grid-cols-3 gap-2 rounded-[16px] bg-[#ded8cf] p-2" aria-label="관리 화면 선택">
-          <button type="button" aria-pressed={view === "reservations"} onClick={() => setView("reservations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "reservations" ? "bg-white text-[#b76e08] shadow-sm" : "text-[#6b6459]"}`}>상담 예약 ({monthlyReservations.length})</button>
-          <button type="button" aria-pressed={view === "consultations"} onClick={() => setView("consultations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "consultations" ? "bg-white text-[#2b2723] shadow-sm" : "text-[#6b6459]"}`}>상담 목록</button>
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-[16px] bg-[#ded8cf] p-2 sm:grid-cols-4" aria-label="관리 화면 선택">
+          <button type="button" aria-pressed={view === "reservations"} onClick={() => setView("reservations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "reservations" ? "bg-white text-[#b76e08] shadow-sm" : "text-[#6b6459]"}`}>상담 예약 ({monthlyStageCounts["예약"]})</button>
+          <button type="button" aria-pressed={view === "inprogress"} onClick={() => setView("inprogress")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "inprogress" ? "bg-white text-sky-800 shadow-sm" : "text-[#6b6459]"}`}>상담중 ({monthlyStageCounts["상담중"]})</button>
+          <button type="button" aria-pressed={view === "consultations"} onClick={() => setView("consultations")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "consultations" ? "bg-white text-[#2b2723] shadow-sm" : "text-[#6b6459]"}`}>상담완료 ({monthlyRecords.length + monthlyStageCounts.pendingCompleted})</button>
           <button type="button" aria-pressed={view === "diagnoses"} onClick={() => setView("diagnoses")} className={`min-h-12 rounded-xl text-sm font-extrabold sm:text-base ${view === "diagnoses" ? "bg-white text-violet-800 shadow-sm" : "text-[#6b6459]"}`}>보컬 진단서 ({monthlyDiagnoses.length})</button>
         </div>
 
@@ -847,9 +883,32 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
           ))}
         </section> : null}
 
-        {view === "consultations" && !showPastArchive ? <section className="mt-4 space-y-3" aria-label="상담 목록">
-          {!loading && filtered.length === 0 ? (
-            <div className="rounded-[18px] bg-white p-10 text-center text-[#8a8378]">조건에 맞는 상담 카드가 없습니다.</div>
+        {view === "consultations" && !showPastArchive ? <section className="mt-4 space-y-3" aria-label="상담완료 목록">
+          {completedPendingReservations.map((reservation) => (
+            <article key={`pending-${reservation.id}`} className="rounded-[18px] border-2 border-[#e8a23d]/60 bg-amber-50 p-4 shadow-[0_2px_10px_rgba(0,0,0,0.05)] sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-[230px] flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-xl font-black">{reservation.name}</h2>
+                    <span className="rounded-full bg-amber-200 px-2.5 py-1 text-xs font-black text-amber-900">체험수업 완료 · 상담 카드 대기</span>
+                  </div>
+                  <p className="mt-1.5 text-sm font-semibold text-[#4a453d]">{[reservation.phone, reservation.lesson_type, reservation.subjects.join(", ")].filter(Boolean).join(" · ")}</p>
+                  {(reservation.trial_slots?.length
+                    ? reservation.trial_slots.filter((slot) => slot.at)
+                    : reservation.confirmed_at ? [{ subject: reservation.subjects[0] || "체험", at: reservation.confirmed_at, teacher: reservation.trial_teacher || "", room: reservation.trial_room || "" }] : []
+                  ).map((slot) => (
+                    <p key={slot.subject} className="mt-1 text-sm text-[#6b6459]">{[slot.subject, formatTrialDateTime(slot.at), slot.teacher && `${slot.teacher} 강사`, slot.room].filter(Boolean).join(" · ")}</p>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 items-center rounded-xl bg-[#2b2723] px-5 text-sm font-black text-white">상담 시작 →</Link>
+                  {!teacherMode ? <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button> : null}
+                </div>
+              </div>
+            </article>
+          ))}
+          {!loading && filtered.length === 0 && completedPendingReservations.length === 0 ? (
+            <div className="rounded-[18px] bg-white p-10 text-center text-[#8a8378]">상담완료된 건이 없습니다.</div>
           ) : null}
           {filtered.map((record) => (
             <article key={record.id} className="rounded-[18px] bg-white p-4 shadow-[0_2px_10px_rgba(0,0,0,0.05)] sm:p-5">
@@ -882,10 +941,11 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
               </div>
             </article>
           ))}
-        </section> : view === "reservations" ? (
-          <section className="mt-4 space-y-3" aria-label="상담 예약 목록">
-            {!reservationsLoading && filteredReservations.length === 0 ? <div className="rounded-[18px] bg-white p-10 text-center text-[#8a8378]">조건에 맞는 상담 예약이 없습니다.</div> : null}
-            {filteredReservations.map((reservation) => {
+        </section> : view === "reservations" || view === "inprogress" ? (
+          <section className="mt-4 space-y-3" aria-label={view === "reservations" ? "상담 예약 목록" : "상담중 목록"}>
+            {view === "reservations" ? <p className="rounded-xl bg-sky-50 p-3 text-sm font-semibold text-sky-900">체험수업 날짜·시간과 강사를 확정해 저장하면 자동으로 [상담중]으로 넘어갑니다.</p> : <p className="rounded-xl bg-sky-50 p-3 text-sm font-semibold text-sky-900">체험수업이 끝나면(수업 시간 30분 경과) 자동으로 [상담완료]로 넘어갑니다.</p>}
+            {!reservationsLoading && (view === "reservations" ? stagedReservations["예약"] : stagedReservations["상담중"]).length === 0 ? <div className="rounded-[18px] bg-white p-10 text-center text-[#8a8378]">{view === "reservations" ? "새로 들어온 상담 예약이 없습니다." : "체험수업이 확정된 대기 건이 없습니다."}</div> : null}
+            {(view === "reservations" ? stagedReservations["예약"] : stagedReservations["상담중"]).map((reservation) => {
               const linked = consultationByReservation.get(reservation.id);
               const todayConfirmed = reservation.confirmed_at && seoulDay(new Date(reservation.confirmed_at)) === seoulDay(new Date());
               return <article key={reservation.id} className={`rounded-[18px] p-4 shadow-[0_2px_10px_rgba(0,0,0,0.05)] sm:p-5 ${todayConfirmed ? "border-2 border-[#e8a23d] bg-amber-50" : "bg-white"}`}>
