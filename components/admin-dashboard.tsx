@@ -512,6 +512,9 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
     });
   }, [monthlyReservations, search]);
 
+  // 예약 ↔ 상담 카드 연결 (단계 분류에서 먼저 필요하므로 위쪽에서 선언)
+  const consultationByReservation = useMemo(() => new Map(records.flatMap((item) => item.reservation_id ? [[item.reservation_id, item] as const] : [])), [records]);
+
   // 파이프라인 단계별 분류 (검색 반영된 목록)
   const stagedReservations = useMemo(() => {
     const groups: Record<ReservationStage, ReservationRecord[]> = { "예약": [], "상담중": [], "완료": [] };
@@ -563,7 +566,6 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
   }, [consentRequests]);
 
   const reservationById = useMemo(() => new Map(reservations.map((item) => [item.id, item] as const)), [reservations]);
-  const consultationByReservation = useMemo(() => new Map(records.flatMap((item) => item.reservation_id ? [[item.reservation_id, item] as const] : [])), [records]);
 
   async function login(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
