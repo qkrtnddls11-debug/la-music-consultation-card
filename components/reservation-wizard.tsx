@@ -74,7 +74,7 @@ export function ReservationWizard({ source, branchName }: { source: ReservationS
     if (current === "gender" && !draft.gender) return "성별을 선택해 주세요";
     if (current === "birth" && (!birth.year || !birth.month || !birth.day)) return "생년월일의 연도, 월, 일을 모두 입력해 주세요";
     if (current === "birth" && !chosenBirth) return "올바른 생년월일을 입력해 주세요";
-    if (current === "subjects" && draft.subjects.length === 0) return "희망 과목을 하나 이상 선택해 주세요";
+    if (current === "subjects" && draft.subjects.length === 0) return "메인 과목을 선택해 주세요";
     if (current === "lesson" && !draft.lesson_type) return "입시 또는 취미를 선택해 주세요";
     if (current === "schedule" && (!draft.schedule_preferences[0]?.days.length || !draft.schedule_preferences[0]?.timeSlot)) return "1순위 요일과 시간대를 선택해 주세요";
     if (current === "schedule" && draft.schedule_preferences.some((item) => (item.days.length || item.timeSlot) && (!item.days.length || !item.timeSlot))) return "선택한 순위는 요일과 시간대를 모두 골라 주세요";
@@ -84,7 +84,20 @@ export function ReservationWizard({ source, branchName }: { source: ReservationS
   useEffect(() => { nextRef.current = goNext; });
   function goBack() { setWarning(""); if (stepIndex > 0) setStep(STEPS[stepIndex - 1]); }
   function updateSchedule(rank: 1 | 2 | 3, update: Partial<ReservationSchedulePreference>) { patch("schedule_preferences", draft.schedule_preferences.map((item) => item.rank === rank ? { ...item, ...update } : item)); }
-  function selectSubject(subject: string) { const subjects = toggle(draft.subjects, subject); patch("subjects", subjects); if (!subjects.includes(subject) && subject in details) setDetails((current) => ({ ...current, [subject]: [] })); }
+  // 메인은 하나만: 배정과 체험수업은 메인 과목 기준으로 잡힌다. 서브는 상담 참고용.
+  function selectMainSubject(subject: string) {
+    const previousMain = draft.subjects[0];
+    if (previousMain === subject) return;
+    const subs = draft.subjects.slice(1).filter((item) => item !== subject);
+    patch("subjects", [subject, ...subs]);
+    if (previousMain && previousMain in details) setDetails((current) => ({ ...current, [previousMain]: [] }));
+  }
+  function toggleSubSubject(subject: string) {
+    if (subject === draft.subjects[0]) return;
+    const subs = toggle(draft.subjects.slice(1), subject);
+    patch("subjects", [draft.subjects[0], ...subs]);
+    if (!subs.includes(subject) && subject in details) setDetails((current) => ({ ...current, [subject]: [] }));
+  }
 
   async function submit() {
     const message = validate("schedule"); if (message) return setWarning(message);
@@ -123,7 +136,7 @@ export function ReservationWizard({ source, branchName }: { source: ReservationS
     if (step === "phone") return <>{heading("전화번호를 입력해 주세요", "세부 일정 조율을 위해 연락드릴 수 있어요")}<input autoFocus type="tel" inputMode="numeric" autoComplete="tel" aria-label="전화번호" className={inputClass} value={draft.phone} onChange={(event) => patch("phone", formatPhone(event.target.value))} placeholder="010-0000-0000" maxLength={13} /></>;
     if (step === "gender") return <>{heading("성별을 선택해 주세요", "하나만 선택해 주세요")}<div className="flex flex-wrap gap-2.5">{["남", "여"].map((value) => <Chip key={value} selected={draft.gender === value} onClick={() => { patch("gender", value); scheduleNext(); }}>{value}</Chip>)}</div></>;
     if (step === "birth") return <>{heading("생년월일을 알려주세요", age === null ? "연도는 숫자로 입력하고 월·일은 목록에서 골라주세요" : <><strong className="text-[#4a453d]">만 {age}세</strong>로 계산되었어요</>)}<BirthDateFields value={birth} onChange={setBirth} inputClassName={inputClass} autoFocus /></>;
-    if (step === "subjects") return <>{heading("희망하는 과목을 선택해 주세요", "여러 개 선택할 수 있어요")}<div className="flex flex-wrap gap-2.5">{SUBJECT_OPTIONS.map((subject) => <Chip key={subject} selected={draft.subjects.includes(subject)} onClick={() => selectSubject(subject)}>{subject}</Chip>)}</div>{(["기타", "피아노", "트럼펫", "플루트"] as DetailSubject[]).map((subject) => draft.subjects.includes(subject) ? <div key={subject} className="mt-4 rounded-[14px] bg-[#f7f4ee] p-4"><p className="mb-2.5 font-bold">{subject} 세부 종류</p><div className="flex flex-wrap gap-2">{(subject === "기타" ? GUITAR_DETAILS : STYLE_DETAILS).map((value) => <Chip compact key={value} selected={details[subject].includes(value)} onClick={() => setDetails((current) => ({ ...current, [subject]: toggle(current[subject], value) }))}>{value}</Chip>)}</div></div> : null)}</>;
+    if (step === "subjects") return <>{heading("메인 과목을 하나 선택해 주세요", "체험수업은 메인 과목으로 진행돼요")}<div className="flex flex-wrap gap-2.5">{SUBJECT_OPTIONS.map((subject) => <Chip key={subject} selected={draft.subjects[0] === subject} onClick={() => selectMainSubject(subject)}>{subject}</Chip>)}</div>{draft.subjects.length > 0 ? <div className="mt-4 rounded-[14px] bg-[#f7f4ee] p-4"><p className="mb-1 font-bold">서브 과목 <span className="font-semibold text-[#9a9389]">(선택사항 · 여러 개 가능)</span></p><p className="mb-2.5 text-sm text-[#9a9389]">관심 있는 과목이 더 있으면 골라 주세요. 상담 때 함께 안내해 드려요.</p><div className="flex flex-wrap gap-2">{SUBJECT_OPTIONS.filter((subject) => subject !== draft.subjects[0]).map((subject) => <Chip compact key={subject} selected={draft.subjects.slice(1).includes(subject)} onClick={() => toggleSubSubject(subject)}>{subject}</Chip>)}</div></div> : null}{(["기타", "피아노", "트럼펫", "플루트"] as DetailSubject[]).map((subject) => draft.subjects.includes(subject) ? <div key={subject} className="mt-4 rounded-[14px] bg-[#f7f4ee] p-4"><p className="mb-2.5 font-bold">{subject} 세부 종류</p><div className="flex flex-wrap gap-2">{(subject === "기타" ? GUITAR_DETAILS : STYLE_DETAILS).map((value) => <Chip compact key={value} selected={details[subject].includes(value)} onClick={() => setDetails((current) => ({ ...current, [subject]: toggle(current[subject], value) }))}>{value}</Chip>)}</div></div> : null)}</>;
     if (step === "lesson") return <>{heading("상담 목적을 선택해 주세요", "하나만 선택해 주세요")}<div className="flex flex-wrap gap-2.5">{["입시", "취미"].map((value) => <Chip key={value} selected={draft.lesson_type === value} onClick={() => { patch("lesson_type", value as "입시" | "취미"); scheduleNext(); }}>{value}</Chip>)}</div></>;
     return <>{heading("체험수업 가능한 시간대를 알려주세요", "순위별로 요일과 시간대를 눌러 주세요. 1순위만 작성해도 괜찮아요")}<div className="space-y-5">{draft.schedule_preferences.map((item) => <div key={item.rank} className="rounded-[16px] bg-[#f7f4ee] p-4"><p className="mb-3 font-black text-[#b76e08]">{item.rank}순위</p><div className="flex flex-wrap gap-2">{DAYS.map((day) => <Chip compact key={day} selected={item.days.includes(day)} onClick={() => updateSchedule(item.rank, { days: toggle(item.days, day) })}>{day}</Chip>)}</div><div className="mt-3 flex flex-wrap gap-2">{TIME_SLOTS.map((timeSlot) => <Chip compact key={timeSlot} selected={item.timeSlot === timeSlot} onClick={() => updateSchedule(item.rank, { timeSlot })}>{timeSlot}</Chip>)}</div></div>)}</div><label htmlFor="reservation-schedule-note" className="mt-6 block text-sm font-black text-[#4a453d]">스케줄 참고사항 <span className="font-semibold text-[#9a9389]">(선택)</span></label><textarea id="reservation-schedule-note" aria-label="스케줄 참고사항" className={`${inputClass} mt-2 min-h-[110px] resize-none leading-relaxed`} value={draft.schedule_note} onChange={(event) => patch("schedule_note", event.target.value)} placeholder="예: 평일은 6시 이후 가능, 토요일은 시간 조정 가능" maxLength={500} /></>;
   }

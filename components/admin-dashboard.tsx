@@ -142,8 +142,16 @@ function addMinutesToClock(time: string, minutes: number) {
   const total = hourPart * 60 + minutePart + minutes;
   return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
+// "메인 랩 · 서브 미디, 기타" 형태로 표시 — 첫 과목이 메인이라는 규칙을 화면에 그대로 드러낸다.
+function subjectsLabel(subjects: string[]) {
+  if (subjects.length === 0) return "";
+  if (subjects.length === 1) return subjects[0];
+  return `메인 ${subjects[0]} · 서브 ${subjects.slice(1).join(", ")}`;
+}
+
 function slotsFromRecord(record: ReservationRecord): EditableSlot[] {
-  const subjects = record.subjects.length > 0 ? record.subjects : ["체험"];
+  // 체험수업 배정은 메인 과목(첫 번째) 하나만 — 서브 과목은 상담 참고용이라 배정 칸을 만들지 않는다.
+  const subjects = record.subjects.length > 0 ? [record.subjects[0]] : ["체험"];
   return subjects.map((entry, index) => {
     const saved = (record.trial_slots || []).find((slot) => slot.subject === entry);
     if (saved) return { subject: entry, atLocal: datetimeLocalValue(saved.at), teacher: saved.teacher || "", room: saved.room || "" };
@@ -894,7 +902,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                     <h2 className="text-xl font-black">{reservation.name}</h2>
                     <span className="rounded-full bg-amber-200 px-2.5 py-1 text-xs font-black text-amber-900">체험수업 완료 · 상담 카드 대기</span>
                   </div>
-                  <p className="mt-1.5 text-sm font-semibold text-[#4a453d]">{[reservation.phone, reservation.lesson_type, reservation.subjects.join(", ")].filter(Boolean).join(" · ")}</p>
+                  <p className="mt-1.5 text-sm font-semibold text-[#4a453d]">{[reservation.phone, reservation.lesson_type, subjectsLabel(reservation.subjects)].filter(Boolean).join(" · ")}</p>
                   {(reservation.trial_slots?.length
                     ? reservation.trial_slots.filter((slot) => slot.at)
                     : reservation.confirmed_at ? [{ subject: reservation.subjects[0] || "체험", at: reservation.confirmed_at, teacher: reservation.trial_teacher || "", room: reservation.trial_room || "" }] : []
@@ -924,7 +932,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.status === "등록" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{record.status === "등록" ? "등록함" : "상담만 함"}</span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${consentByConsultation.has(record.id) ? "bg-emerald-100 text-emerald-800" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "bg-violet-100 text-violet-800" : "bg-[#eee9e0] text-[#6b6459]"}`}>{consentByConsultation.has(record.id) ? "서명 완료" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "서명 대기 중" : "서명 미요청"}</span>
                   </div>
-                  <p className="mt-1.5 text-sm text-[#6b6459]">{record.student_phone || record.parent_phone || "연락처 없음"} · {record.subjects.join(", ") || "과목 미입력"}</p>
+                  <p className="mt-1.5 text-sm text-[#6b6459]">{record.student_phone || record.parent_phone || "연락처 없음"} · {subjectsLabel(record.subjects) || "과목 미입력"}</p>
                   <p className="mt-1 text-xs text-[#9a9389]">{formatCreatedAt(record.created_at)}</p>
                 </button>
                 <div className="flex flex-wrap gap-2">
@@ -955,7 +963,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                   <div className="min-w-[230px] flex-1">
                     <div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-black">{reservation.name}</h2>{todayConfirmed ? <span className="rounded-full bg-[#e8a23d] px-2.5 py-1 text-xs font-black text-[#2b2723]">오늘 상담</span> : null}{monthOfIso(reservation.created_at) !== monthKey ? <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-black text-violet-800">지난달 접수 이월</span> : null}<span className={`rounded-full px-2.5 py-1 text-xs font-bold ${reservation.status === "상담완료" ? "bg-emerald-100 text-emerald-800" : reservation.status === "확정" ? "bg-sky-100 text-sky-800" : "bg-amber-100 text-amber-800"}`}>{reservation.status}</span><span className="rounded-full bg-[#eee9e0] px-2.5 py-1 text-xs font-bold text-[#5a5349]">{reservation.source === "link" ? "링크" : reservation.source === "tablet" ? "현장" : "직접"}</span><span className="rounded-full bg-[#f3efe7] px-2.5 py-1 text-xs font-semibold text-[#9a9389]">{reservation.branch_name || DEFAULT_BRANCH}</span></div>
                     <p className="mt-2 text-sm font-semibold text-[#4a453d]">{[reservation.phone, reservation.gender, reservation.birth_date].filter(Boolean).join(" · ")}</p>
-                    <p className="mt-1 text-sm text-[#6b6459]">{[reservation.lesson_type, reservation.subjects.join(", ")].filter(Boolean).join(" · ")}</p>
+                    <p className="mt-1 text-sm text-[#6b6459]">{[reservation.lesson_type, subjectsLabel(reservation.subjects)].filter(Boolean).join(" · ")}</p>
                     <div className="mt-3 rounded-xl bg-white/80 p-3 text-sm leading-6 text-[#5f584e]">{reservation.schedule_preferences.map((item) => item.days?.length || item.day || item.timeSlot || item.timeText ? <p key={item.rank}><strong>{item.rank}순위</strong> · {reservationScheduleLabel(item)}</p> : null)}{reservation.schedule_note ? <p className="mt-2 border-t border-[#ded8cf] pt-2"><strong>참고</strong> · {reservation.schedule_note}</p> : null}</div>
                     {(reservation.trial_slots?.length || reservation.confirmed_at) ? (
                       <div className="mt-3 rounded-xl border-[1.5px] border-[#e8a23d]/70 bg-amber-50 p-3 text-sm leading-7">
@@ -1097,7 +1105,7 @@ function ConsultationDetail({
     ["성별", record.gender],
     ["학생 연락처", record.student_phone],
     ["학부모 연락처", record.parent_phone],
-    ["관심 과목", record.subjects.join(", ")],
+    ["관심 과목", subjectsLabel(record.subjects)],
     ["보컬 고민", record.vocal_difficulties.join(", ")],
     ["악기 고민", record.instrument_difficulties.join(", ")],
     ["악기 소지", record.has_instrument],
