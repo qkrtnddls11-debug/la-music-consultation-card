@@ -816,7 +816,6 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
             ) : null}
             {!teacherMode ? <Link href={`/reserve?src=crm&branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">오프라인 신규상담 시작하기</Link> : null}
             {!teacherMode ? <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-sky-100 px-3.5 text-sm font-extrabold text-sky-900">온라인 신규상담 링크보내기</button> : null}
-            {!teacherMode ? <Link href={`/consult?branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-white px-3.5 text-sm font-extrabold text-[#2b2723]">체험수업 없이 상담 시작</Link> : null}
             <button type="button" onClick={() => setDiagnosisEditor({ diagnosis: null, consultation: null })} className="min-h-12 rounded-xl bg-violet-100 px-3.5 text-sm font-extrabold text-violet-900">새 진단서</button>
           </div>
         </div>
@@ -982,7 +981,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                   </div>
                   <div className="w-full max-w-sm space-y-3 sm:w-[310px]">
                     <ReservationConfirmEditor key={`${reservation.confirmed_at ?? "empty"}-${JSON.stringify(reservation.trial_slots ?? [])}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`} record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(slots) => void updateReservationSlots(reservation, slots)} />
-                    {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button> : <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2b2723] px-4 text-sm font-black text-white">상담 시작 →</Link>}
+                    {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button> : <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2b2723] px-4 text-sm font-black text-white">{reservationStageOf(reservation, renderedAt) === "예약" ? "체험수업 없이 상담 시작" : "상담 시작 →"}</Link>}
                     {!teacherMode ? <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button> : null}
                   </div>
                 </div>
