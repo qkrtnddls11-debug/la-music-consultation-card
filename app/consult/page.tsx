@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ConsultationWizard } from "@/components/consultation-wizard";
+import { loadBranchSubjects } from "@/lib/branch-config";
 import type { SubmissionSource } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -14,5 +15,6 @@ export default async function ConsultationPage({ searchParams }: ConsultationPag
   const { src, reservation_id: reservationId, branch } = await searchParams;
   const submissionSource: SubmissionSource = src === "link" ? "link" : "tablet";
   const branchName = typeof branch === "string" && branch.trim() ? branch.trim().slice(0, 60) : undefined;
-  return <ConsultationWizard submissionSource={submissionSource} reservationId={typeof reservationId === "string" ? reservationId : undefined} branchName={branchName} />;
+  const subjectOptions = await loadBranchSubjects(branchName);
+  return <ConsultationWizard submissionSource={submissionSource} reservationId={typeof reservationId === "string" ? reservationId : undefined} branchName={branchName} subjectOptions={subjectOptions} />;
 }

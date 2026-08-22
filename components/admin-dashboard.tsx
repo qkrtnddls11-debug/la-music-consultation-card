@@ -814,10 +814,10 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
             {lockedTeacher ? (
               <span className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3 text-sm font-black text-[#2b2723]">{lockedTeacher} 강사 · 내 배정 학생</span>
             ) : null}
-            {!teacherMode ? <Link href={`/reserve?src=crm&branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-sky-100 px-3.5 text-sm font-extrabold text-sky-900">새 상담 예약</Link> : null}
-            {!teacherMode ? <Link href={`/consult?branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">새 상담 시작</Link> : null}
+            {!teacherMode ? <Link href={`/reserve?src=crm&branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">오프라인 신규상담 시작하기</Link> : null}
+            {!teacherMode ? <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-sky-100 px-3.5 text-sm font-extrabold text-sky-900">온라인 신규상담 링크보내기</button> : null}
+            {!teacherMode ? <Link href={`/consult?branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-white px-3.5 text-sm font-extrabold text-[#2b2723]">체험수업 없이 상담 시작</Link> : null}
             <button type="button" onClick={() => setDiagnosisEditor({ diagnosis: null, consultation: null })} className="min-h-12 rounded-xl bg-violet-100 px-3.5 text-sm font-extrabold text-violet-900">새 진단서</button>
-            {!teacherMode ? <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-white px-3.5 text-sm font-extrabold text-[#2b2723]">상담 링크 보내기</button> : null}
           </div>
         </div>
       </header>

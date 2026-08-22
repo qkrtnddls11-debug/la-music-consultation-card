@@ -7,10 +7,8 @@ import {
   COMMON_INSTRUMENT_DIFFICULTIES,
   DAYS,
   EMPTY_CONSULTATION,
-  GUITAR_DETAILS,
   PURPOSE_OPTIONS,
   REFERRAL_OPTIONS,
-  STYLE_DETAILS,
   SUBJECT_OPTIONS,
   TIME_SLOTS,
   VOCAL_DIFFICULTIES,
@@ -244,7 +242,8 @@ function SubBlock({ children }: { children: React.ReactNode }) {
   return <div className="mt-[18px] rounded-[14px] bg-[#f7f4ee] p-4">{children}</div>;
 }
 
-export function ConsultationWizard({ submissionSource, reservationId, branchName }: { submissionSource: SubmissionSource; reservationId?: string; branchName?: string }) {
+export function ConsultationWizard({ submissionSource, reservationId, branchName, subjectOptions }: { submissionSource: SubmissionSource; reservationId?: string; branchName?: string; subjectOptions?: string[] }) {
+  const subjectChoices = subjectOptions && subjectOptions.length > 0 ? subjectOptions : [...SUBJECT_OPTIONS];
   const [draft, setDraft] = useState<ConsultationInput>(() => createEmptyDraft(submissionSource, branchName));
   const [details, setDetails] = useState<SubjectDetails>({ ...EMPTY_DETAILS });
   const [birth, setBirth] = useState(() => ({ ...EMPTY_BIRTH_DATE }));
@@ -564,13 +563,7 @@ export function ConsultationWizard({ submissionSource, reservationId, branchName
         return (
           <>
             <QuestionHeading title={<>레슨 받고 싶거나<br />관심 있는 과목은 무엇인가요?</>} sub="여러 개 선택할 수 있어요" />
-            <ChipWrap>{SUBJECT_OPTIONS.map((subject) => <Chip key={subject} selected={draft.subjects.includes(subject)} onClick={() => selectSubject(subject)}>{subject}</Chip>)}</ChipWrap>
-            {(["기타", "피아노", "트럼펫", "플루트"] as SubjectDetailKey[]).map((subject) => draft.subjects.includes(subject) ? (
-              <SubBlock key={subject}>
-                <p className="mb-2.5 text-[0.95rem] font-bold text-[#4a453d]">{subject === "기타" ? "🎸" : subject === "피아노" ? "🎹" : subject === "트럼펫" ? "🎺" : "🪈"} {subject} — 어떤 종류인가요? (여러 개 가능)</p>
-                <ChipWrap>{(subject === "기타" ? GUITAR_DETAILS : STYLE_DETAILS).map((item) => <Chip compact key={item} selected={details[subject].includes(item)} onClick={() => setDetails((previous) => ({ ...previous, [subject]: toggleValue(previous[subject], item) }))}>{item}</Chip>)}</ChipWrap>
-              </SubBlock>
-            ) : null)}
+            <ChipWrap>{subjectChoices.map((subject) => <Chip key={subject} selected={draft.subjects.includes(subject)} onClick={() => selectSubject(subject)}>{subject}</Chip>)}</ChipWrap>
           </>
         );
       case "vocal":
