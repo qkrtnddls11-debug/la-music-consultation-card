@@ -224,12 +224,14 @@ function TrialSlotEditor({ slot, options, disabled, idPrefix, ownName, onChange 
   </div>;
 }
 
-function ReservationConfirmEditor({ record, busy, options, onSave }: { record: ReservationRecord; busy: boolean; options: CrmScheduleOptions | null; onSave: (slots: EditableSlot[]) => void }) {
+function ReservationConfirmEditor({ record, busy, options, onSave, onDirtyChange }: { record: ReservationRecord; busy: boolean; options: CrmScheduleOptions | null; onSave: (slots: EditableSlot[]) => void; onDirtyChange?: (dirty: boolean) => void }) {
   const initialSlots = slotsFromRecord(record);
   const [slots, setSlots] = useState<EditableSlot[]>(initialSlots);
   const disabled = busy || record.status === "상담완료";
   const unchanged = JSON.stringify(slots) === JSON.stringify(initialSlots);
   const hasAnySchedule = slots.some((slot) => slot.atLocal);
+  // 저장하지 않은 배정 변경이 있으면 부모(카드)에게 알려 상담 시작 버튼을 잠근다
+  useEffect(() => { onDirtyChange?.(!unchanged); }, [unchanged, onDirtyChange]);
   return <div>
     <p className="text-sm font-extrabold text-[#6b6459]">체험수업 배정 {slots.length > 1 ? `(${slots.length}과목)` : ""}</p>
     <div className="mt-1.5 space-y-2">
@@ -268,6 +270,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
   const teacherMode = Boolean(lockedTeacher);
   const [auth, setAuth] = useState<AuthState>("checking");
   const [crmOptions, setCrmOptions] = useState<CrmScheduleOptions | null>(null);
+  const [unsavedTrialIds, setUnsavedTrialIds] = useState<string[]>([]);
   const [branchFilter, setBranchFilter] = useState<string>(lockedBranch || DEFAULT_BRANCH);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -980,8 +983,11 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                     <p className="mt-2 text-xs text-[#9a9389]">접수 {formatCreatedAt(reservation.created_at)}</p>
                   </div>
                   <div className="w-full max-w-sm space-y-3 sm:w-[310px]">
-                    <ReservationConfirmEditor key={`${reservation.confirmed_at ?? "empty"}-${JSON.stringify(reservation.trial_slots ?? [])}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`} record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(slots) => void updateReservationSlots(reservation, slots)} />
-                    {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button> : <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2b2723] px-4 text-sm font-black text-white">{reservationStageOf(reservation, renderedAt) === "예약" ? "체험수업 없이 상담 시작" : "체험수업 및 상담 시작"}</Link>}
+                    <ReservationConfirmEditor key={`${reservation.confirmed_at ?? "empty"}-${JSON.stringify(reservation.trial_slots ?? [])}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`} record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(slots) => void updateReservationSlots(reservation, slots)} onDirtyChange={(dirty) => setUnsavedTrialIds((current) => (dirty ? (current.includes(reservation.id) ? current : [...current, reservation.id]) : (current.includes(reservation.id) ? current.filter((id) => id !== reservation.id) : current)))} />
+                    {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button>
+                      : unsavedTrialIds.includes(reservation.id)
+                        ? <button type="button" disabled className="min-h-12 w-full rounded-xl bg-[#eee9e0] px-4 text-sm font-black text-[#9a9389]">체험수업 배정을 먼저 저장해 주세요</button>
+                        : <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#2b2723] px-4 text-sm font-black text-white">{reservationStageOf(reservation, renderedAt) === "예약" ? "체험수업 없이 상담 시작" : "체험수업 및 상담 시작"}</Link>}
                     {!teacherMode ? <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button> : null}
                   </div>
                 </div>
