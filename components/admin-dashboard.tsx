@@ -822,7 +822,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
             {!teacherMode ? <Link href={`/reserve?src=crm&branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">오프라인 신규상담 시작하기</Link> : null}
             {!teacherMode ? <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-sky-100 px-3.5 text-sm font-extrabold text-sky-900">온라인 신규상담 링크보내기</button> : null}
             <button type="button" onClick={() => setDiagnosisEditor({ diagnosis: null, consultation: null })} className="min-h-12 rounded-xl bg-violet-100 px-3.5 text-sm font-extrabold text-violet-900">새 진단서</button>
-            {!teacherMode ? <button type="button" onClick={() => setRulesDocOpen(true)} className="min-h-12 rounded-xl border border-[#6b6459] px-3.5 text-sm font-bold text-[#d8d2c8]">동의서 서식</button> : null}
+            {!teacherMode ? <button type="button" onClick={() => setRulesDocOpen(true)} className="min-h-12 rounded-xl bg-emerald-100 px-3.5 text-sm font-extrabold text-emerald-900">학원 규칙 동의서 업로드 하기</button> : null}
           </div>
         </div>
       </header>
