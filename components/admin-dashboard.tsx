@@ -6,6 +6,7 @@ import { BirthDateFields } from "@/components/birth-date-fields";
 import { ConsentDetailModal } from "@/components/consent-detail-modal";
 import { ConsultationLinkDialog } from "@/components/consultation-link-dialog";
 import { RegistrationConsentFlow } from "@/components/registration-consent-flow";
+import { RulesDocumentDialog } from "@/components/rules-document-dialog";
 import { SignatureLinkDialog } from "@/components/signature-link-dialog";
 import { VocalDiagnosisEditor } from "@/components/vocal-diagnosis-editor";
 import type {
@@ -271,6 +272,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
   const [auth, setAuth] = useState<AuthState>("checking");
   const [crmOptions, setCrmOptions] = useState<CrmScheduleOptions | null>(null);
   const [unsavedTrialIds, setUnsavedTrialIds] = useState<string[]>([]);
+  const [rulesDocOpen, setRulesDocOpen] = useState(false);
   const [branchFilter, setBranchFilter] = useState<string>(lockedBranch || DEFAULT_BRANCH);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -820,6 +822,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
             {!teacherMode ? <Link href={`/reserve?src=crm&branch=${encodeURIComponent(branchFilter)}`} className="flex min-h-12 items-center rounded-xl bg-[#e8a23d] px-3.5 text-sm font-extrabold text-[#2b2723]">오프라인 신규상담 시작하기</Link> : null}
             {!teacherMode ? <button type="button" onClick={() => setLinkDialogOpen(true)} className="min-h-12 rounded-xl bg-sky-100 px-3.5 text-sm font-extrabold text-sky-900">온라인 신규상담 링크보내기</button> : null}
             <button type="button" onClick={() => setDiagnosisEditor({ diagnosis: null, consultation: null })} className="min-h-12 rounded-xl bg-violet-100 px-3.5 text-sm font-extrabold text-violet-900">새 진단서</button>
+            {!teacherMode ? <button type="button" onClick={() => setRulesDocOpen(true)} className="min-h-12 rounded-xl border border-[#6b6459] px-3.5 text-sm font-bold text-[#d8d2c8]">동의서 서식</button> : null}
           </div>
         </div>
       </header>
@@ -1029,8 +1032,9 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
 
       {selected ? <ConsultationDetail record={selected} reservation={selected.reservation_id ? reservationById.get(selected.reservation_id) : undefined} diagnosis={diagnosisByConsultation.get(selected.id)} consent={consentByConsultation.get(selected.id)} consentRequest={latestRequestByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id || deletingKey === `consultation:${selected.id}`} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onConsent={() => { const consent = consentByConsultation.get(selected.id); if (consent) setConsentViewer({ consentId: consent.id, consultation: selected }); }} onSignatureLink={() => { setSignatureRecord(selected); setSelected(null); }} onRecordUpdate={(record) => { setRecords((current) => current.map((item) => item.id === record.id ? record : item)); setSelected(record); }} onStatus={(status) => void updateStatus(selected, status)} onDelete={() => void deleteRecord("consultation", selected.id, selected.name)} /> : null}
       {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} branchName={branchFilter} /> : null}
+      {rulesDocOpen ? <RulesDocumentDialog onClose={() => setRulesDocOpen(false)} branchName={branchFilter} /> : null}
       {diagnosisEditor ? <VocalDiagnosisEditor initialDiagnosis={diagnosisEditor.diagnosis} consultation={diagnosisEditor.consultation} onClose={() => setDiagnosisEditor(null)} onSaved={upsertDiagnosis} /> : null}
-      {registrationRecord ? <RegistrationConsentFlow consultation={registrationRecord} onClose={() => setRegistrationRecord(null)} onComplete={completeRegistration} /> : null}
+      {registrationRecord ? <RegistrationConsentFlow consultation={registrationRecord} branchName={branchFilter} onClose={() => setRegistrationRecord(null)} onComplete={completeRegistration} /> : null}
       {consentViewer ? <ConsentDetailModal consentId={consentViewer.consentId} consultation={consentViewer.consultation} onClose={() => setConsentViewer(null)} /> : null}
       {signatureRecord ? <SignatureLinkDialog consultation={signatureRecord} onClose={() => setSignatureRecord(null)} onCreated={storeConsentRequest} /> : null}
     </main>

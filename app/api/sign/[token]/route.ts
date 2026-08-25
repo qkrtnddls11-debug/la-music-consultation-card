@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
     const { token } = await params;
     const requestResult = await activeRequest(token);
     if ("error" in requestResult) return Response.json({ error: requestResult.error }, { status: requestResult.status });
-    const { data, error } = await createAdminSupabase().from("consultations").select("id,name,birth_date,student_phone,parent_phone,school,gender").eq("id", requestResult.data.consultation_id).maybeSingle();
+    const { data, error } = await createAdminSupabase().from("consultations").select("id,name,birth_date,student_phone,parent_phone,branch_name,school,gender").eq("id", requestResult.data.consultation_id).maybeSingle();
     if (error || !data) return Response.json({ error: "연결된 상담 카드를 찾지 못했습니다." }, { status: 404 });
     return Response.json({ consultation: data, expires_at: requestResult.data.expires_at }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

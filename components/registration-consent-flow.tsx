@@ -26,14 +26,16 @@ function ChoiceButtons({ value, onChange, label }: { value: ConsentChoice | ""; 
   );
 }
 
-export function RegistrationConsentFlow({ consultation, onClose, onComplete, submitUrl = "/api/admin/consents", publicLink = false }: {
+export function RegistrationConsentFlow({ consultation, onClose, onComplete, submitUrl = "/api/admin/consents", publicLink = false, branchName }: {
   consultation: ConsentConsultation;
   onClose: () => void;
   onComplete: (consent: ConsentRecord) => void;
   submitUrl?: string;
   publicLink?: boolean;
+  branchName?: string;
 }) {
   const [step, setStep] = useState<Step>(1);
+  const [rulesDocument, setRulesDocument] = useState<{ hasCustom: boolean; url: string | null; type: string | null; name: string | null; version: string } | null>(null);
   const [rulesRead, setRulesRead] = useState(false);
   const [rulesAgreed, setRulesAgreed] = useState(false);
   const [requiredAgreed, setRequiredAgreed] = useState(false);
@@ -56,6 +58,22 @@ export function RegistrationConsentFlow({ consultation, onClose, onComplete, sub
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/branch-documents?branch=${encodeURIComponent(branchName || "")}`, { cache: "no-store" });
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        if (cancelled) return;
+        setRulesDocument(data);
+        // 올린 문서(PDF·이미지)는 내부 스크롤을 감지할 수 없어 스크롤 잠금을 쓰지 않는다
+        if (data?.hasCustom) setRulesRead(true);
+      } catch { /* 실패하면 기본판 사용 */ }
+    })();
+    return () => { cancelled = true; };
+  }, [branchName]);
 
   function checkRulesScroll(element: HTMLDivElement) {
     if (element.scrollHeight - element.scrollTop - element.clientHeight <= 12) setRulesRead(true);
@@ -86,6 +104,7 @@ export function RegistrationConsentFlow({ consultation, onClose, onComplete, sub
         body: JSON.stringify({
           consultation_id: consultation.id,
           rules_agreed: rulesAgreed,
+          rules_document_version: rulesDocument?.version || "기본판 2024-04-01",
           required_info_agreed: requiredAgreed,
           unique_identifier_consent: uniqueConsent,
           optional_info_consent: optionalConsent,
@@ -127,7 +146,16 @@ export function RegistrationConsentFlow({ consultation, onClose, onComplete, sub
         {step === 1 ? (
           <section>
             <div className="mb-4"><h2 className="text-2xl font-black">1단계 · 학원규칙</h2><p className="mt-1 text-sm font-semibold text-[#6b6459]">전문을 끝까지 내려서 확인해 주세요.</p></div>
-            <div tabIndex={0} onScroll={(event) => checkRulesScroll(event.currentTarget)} className="h-[57dvh] min-h-[380px] overflow-y-auto rounded-2xl border border-[#d8d2c8] bg-white p-5 shadow-inner sm:p-7"><AcademyRulesContent /></div>
+            {rulesDocument?.hasCustom && rulesDocument.url ? (
+              <div className="rounded-2xl border border-[#d8d2c8] bg-white p-2 shadow-inner">
+                {(rulesDocument.type || "").startsWith("image/")
+                  ? <div className="h-[57dvh] min-h-[380px] overflow-y-auto"><img src={rulesDocument.url} alt="학원규칙 동의서" className="w-full" /></div>
+                  : <iframe src={rulesDocument.url} title="학원규칙 동의서" className="h-[57dvh] min-h-[380px] w-full rounded-xl" />}
+                <a href={rulesDocument.url} target="_blank" rel="noreferrer" className="mt-2 flex min-h-12 items-center justify-center rounded-xl bg-[#eee9e0] text-sm font-extrabold text-[#4a453d]">새 창에서 크게 보기</a>
+              </div>
+            ) : (
+              <div tabIndex={0} onScroll={(event) => checkRulesScroll(event.currentTarget)} className="h-[57dvh] min-h-[380px] overflow-y-auto rounded-2xl border border-[#d8d2c8] bg-white p-5 shadow-inner sm:p-7"><AcademyRulesContent /></div>
+            )}
             {!rulesRead ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-center text-sm font-bold text-amber-800">아래 끝까지 스크롤하면 동의할 수 있습니다.</p> : null}
             <label className={`mt-4 flex min-h-16 cursor-pointer items-center gap-3 rounded-2xl border-2 p-4 font-extrabold ${rulesRead ? "border-[#e8a23d] bg-amber-50" : "border-[#d8d2c8] bg-[#eee9e0] text-[#8a8378]"}`}>
               <input type="checkbox" className="size-6 shrink-0 accent-[#e8a23d]" disabled={!rulesRead} checked={rulesAgreed} onChange={(event) => setRulesAgreed(event.target.checked)} />

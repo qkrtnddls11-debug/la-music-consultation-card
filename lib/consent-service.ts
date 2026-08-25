@@ -75,6 +75,7 @@ export async function createConsent(body: Record<string, unknown>, consultationI
       signer_role: minor ? "법정대리인" : "본인",
       rules_agreed: true,
       required_info_agreed: true,
+      rules_document_version: clean(body.rules_document_version, 60) || "기본판 2024-04-01",
       unique_identifier_consent: uniqueIdentifierConsent,
       optional_info_consent: optionalInfoConsent,
       marketing_consent: marketingConsent,
