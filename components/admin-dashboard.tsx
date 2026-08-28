@@ -758,7 +758,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "담당 강사를 바꾸지 못했습니다.");
     } finally {
-      setUpdatingId(null);
+      setUpdatingId("");
     }
   }
 
