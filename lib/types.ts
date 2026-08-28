@@ -154,6 +154,7 @@ export type ConsultationRecord = ConsultationInput & {
   id: string;
   created_at: string;
   status: ConsultationStatus;
+  assigned_teacher?: string | null;
 };
 
 export type VocalDiagnosisInput = {

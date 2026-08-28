@@ -453,7 +453,10 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
     const scoped = records.filter((item) => (item.branch_name || DEFAULT_BRANCH) === branchFilter);
     if (!lockedTeacher) return scoped;
     const myReservationIds = new Set(branchReservations.map((item) => item.id));
-    return scoped.filter((item) => item.reservation_id && myReservationIds.has(item.reservation_id));
+    return scoped.filter((item) => (
+      (item.reservation_id && myReservationIds.has(item.reservation_id))
+      || item.assigned_teacher === lockedTeacher
+    ));
   }, [records, branchFilter, lockedTeacher, branchReservations]);
   const branchDiagnoses = useMemo(() => {
     const recordIds = new Set(branchRecords.map((item) => item.id));
@@ -738,6 +741,27 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
     }
   }
 
+  // 상담지 토스: 체험 강사와 정규 강사가 다를 때, 관리자가 이 상담지를 볼 강사를 지정한다.
+  async function assignConsultationTeacher(record: ConsultationRecord, teacherName: string) {
+    if (updatingId) return;
+    setUpdatingId(record.id);
+    setLoadError("");
+    try {
+      const response = await fetch(`/api/admin/consultations/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_teacher: teacherName || null }),
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "담당 강사를 바꾸지 못했습니다.");
+      setRecords((current) => current.map((item) => item.id === record.id ? { ...item, assigned_teacher: teacherName || null } : item));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "담당 강사를 바꾸지 못했습니다.");
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   async function updateStatus(record: ConsultationRecord, status: ConsultationStatus) {
     if (status === "등록" && !consentByConsultation.has(record.id)) {
       setSelected(null);
@@ -950,6 +974,11 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                     <button type="button" onClick={() => setConsentViewer({ consentId: consentByConsultation.get(record.id)!.id, consultation: record })} className="min-h-12 rounded-xl bg-emerald-100 px-4 text-sm font-extrabold text-emerald-900">동의서 보기</button>
                   ) : null}
                   <button type="button" onClick={() => setSelected(record)} className="min-h-12 rounded-xl bg-[#eee9e0] px-4 text-sm font-bold text-[#4a453d]">상세 보기</button>
+                  {!teacherMode ? <select aria-label="담당 강사 토스" value={record.assigned_teacher || ""} disabled={updatingId === record.id} onChange={(event) => void assignConsultationTeacher(record, event.target.value)} className="min-h-12 rounded-xl border border-[#e4ded4] bg-white px-3 text-sm font-extrabold text-[#4a453d]">
+                    <option value="">강사 토스 안 함</option>
+                    {(crmOptions?.teachers || []).map((name) => <option key={name} value={name}>{name}에게 토스</option>)}
+                    {record.assigned_teacher && !(crmOptions?.teachers || []).includes(record.assigned_teacher) && <option value={record.assigned_teacher}>{record.assigned_teacher}에게 토스</option>}
+                  </select> : null}
                   {!teacherMode ? <button type="button" disabled={updatingId === record.id} onClick={() => void updateStatus(record, record.status === "상담" || !consentByConsultation.has(record.id) ? "등록" : "상담")} className={`min-h-12 rounded-xl px-4 text-sm font-extrabold disabled:opacity-50 ${record.status === "상담" || !consentByConsultation.has(record.id) ? "bg-[#e8a23d] text-[#2b2723]" : "bg-[#2b2723] text-white"}`}>{record.status === "상담" ? "등록으로 변경" : consentByConsultation.has(record.id) ? "상담으로 변경" : "동의서 받기"}</button> : null}
                   <button type="button" disabled={deletingKey === `consultation:${record.id}`} onClick={() => void deleteRecord("consultation", record.id, record.name)} className="min-h-12 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `consultation:${record.id}` ? "삭제 중…" : "삭제"}</button>
                 </div>
