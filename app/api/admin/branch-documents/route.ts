@@ -40,12 +40,17 @@ export async function POST(request: Request) {
           return Response.json({ error: "파일 용량은 10MB까지 가능합니다." }, { status: 400 });
         }
         const path = `${encodeURIComponent(branch)}/rules-${Date.now()}.${extension}`;
-        const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
-        if (error || !data) {
-          console.error("branch document sign failed", error?.message);
-          return Response.json({ error: "업로드 주소를 만들지 못했습니다. 잠시 후 다시 시도해 주세요." }, { status: 502 });
+        let signResult = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
+        if (signResult.error) {
+          // 버킷이 아직 없으면 만들어서 한 번 더 시도한다 (최초 1회 자가 설치).
+          await supabase.storage.createBucket(BUCKET, { public: false }).catch(() => undefined);
+          signResult = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
         }
-        return Response.json({ ok: true, path, signedUrl: data.signedUrl });
+        if (signResult.error || !signResult.data) {
+          console.error("branch document sign failed", signResult.error?.message);
+          return Response.json({ error: `업로드 주소를 만들지 못했습니다. (${signResult.error?.message || "원인 미상"})` }, { status: 502 });
+        }
+        return Response.json({ ok: true, path, signedUrl: signResult.data.signedUrl });
       }
 
       if (body.action === "commit") {
