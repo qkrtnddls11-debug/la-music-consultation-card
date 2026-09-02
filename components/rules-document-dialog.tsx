@@ -25,12 +25,30 @@ export function RulesDocumentDialog({ onClose, branchName }: { onClose: () => vo
   async function upload(file: File) {
     setBusy(true); setNote("");
     try {
-      const form = new FormData();
-      form.append("branch", branchName || "");
-      form.append("file", file);
-      const response = await fetch("/api/admin/branch-documents", { method: "POST", body: form });
-      const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error || "올리지 못했습니다.");
+      // 파일은 서버를 거치지 않고 저장소로 직행한다 (서버 경유는 4.5MB에서 잘려 폰 사진이 실패).
+      const signResponse = await fetch("/api/admin/branch-documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sign", branch: branchName || "", fileName: file.name, fileType: file.type, fileSize: file.size })
+      });
+      const signData = await signResponse.json().catch(() => ({})) as { error?: string; path?: string; signedUrl?: string };
+      if (!signResponse.ok || !signData.path || !signData.signedUrl) throw new Error(signData.error || "업로드를 준비하지 못했습니다.");
+
+      const putResponse = await fetch(signData.signedUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file
+      });
+      if (!putResponse.ok) throw new Error("파일을 저장소에 올리지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.");
+
+      const commitResponse = await fetch("/api/admin/branch-documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "commit", branch: branchName || "", path: signData.path, fileName: file.name, fileType: file.type })
+      });
+      const commitData = await commitResponse.json().catch(() => ({})) as { error?: string };
+      if (!commitResponse.ok) throw new Error(commitData.error || "업로드 기록을 저장하지 못했습니다.");
+
       setNote("업로드되었습니다. 이제 이 파일로 동의를 받습니다.");
       await refresh();
     } catch (error) {
