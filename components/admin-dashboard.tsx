@@ -470,13 +470,26 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
     const recordIds = new Set(branchRecords.map((item) => item.id));
     return consents.filter((item) => recordIds.has(item.consultation_id));
   }, [consents, branchRecords]);
+  // 전체 지점 목록: 상담 기록이 없는 지점도 고를 수 있게 CRM에서 정답 목록을 받아온다.
+  const [crmBranchNames, setCrmBranchNames] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("https://220-9-crm-crm-crm-next.vercel.app/api/branches", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { branches?: string[] }) => {
+        if (!cancelled && Array.isArray(data?.branches)) setCrmBranchNames(data.branches.filter(Boolean));
+      })
+      .catch(() => { /* CRM 응답 실패 시 기존 방식(기록 있는 지점만)으로 동작 */ });
+    return () => { cancelled = true; };
+  }, []);
   const branchOptions = useMemo(() => {
     const names = new Set<string>([DEFAULT_BRANCH]);
+    crmBranchNames.forEach((name) => names.add(name));
     reservations.forEach((item) => names.add(item.branch_name || DEFAULT_BRANCH));
     records.forEach((item) => names.add(item.branch_name || DEFAULT_BRANCH));
     diagnoses.forEach((item) => { if (item.branch_name) names.add(item.branch_name); });
     return Array.from(names);
-  }, [reservations, records, diagnoses]);
+  }, [crmBranchNames, reservations, records, diagnoses]);
 
   // 월 단위 보기: 이번 달 접수·이번 달 체험 확정 건을 보여주고,
   // 아직 진행 중(대기·확정)인 예약은 지난달 접수여도 이번 달 화면에 이월되어 계속 보인다

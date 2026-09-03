@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { AcademyRulesContent, PrivacyTermsContent } from "@/components/consent-document-content";
+import { PdfPages } from "@/components/pdf-pages";
 import type { ConsentRecord, ConsultationRecord } from "@/lib/types";
 
 function formatDate(value: string) {
@@ -24,6 +25,16 @@ export function ConsentDetailModal({ consentId, consultation, onClose }: {
 }) {
   const [consent, setConsent] = useState<ConsentRecord | null>(null);
   const [error, setError] = useState("");
+  // 지점이 규칙 문서를 올려 그 판으로 서명했다면, 기본판 글 대신 그 문서를 보여준다.
+  const [branchDoc, setBranchDoc] = useState<{ hasCustom: boolean; url: string | null; type: string | null } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/branch-documents?branch=${encodeURIComponent(consultation.branch_name || "")}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => { if (!cancelled && data) setBranchDoc(data); })
+      .catch(() => { /* 실패 시 기본판 표시 */ });
+    return () => { cancelled = true; };
+  }, [consultation.branch_name]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +92,13 @@ export function ConsentDetailModal({ consentId, consultation, onClose }: {
                 </div>
               </section>
 
-              <section className="consent-document-page rounded-2xl border border-[#d8d2c8] p-5 sm:p-8"><AcademyRulesContent /></section>
+              <section className="consent-document-page rounded-2xl border border-[#d8d2c8] p-5 sm:p-8">
+                {(consent as ConsentRecord & { rules_document_version?: string | null }).rules_document_version?.startsWith("업로드판") && branchDoc?.hasCustom && branchDoc.url
+                  ? ((branchDoc.type || "").startsWith("image/")
+                    ? <img src={branchDoc.url} alt="학원규칙 동의서" className="w-full" />
+                    : <PdfPages url={branchDoc.url} />)
+                  : <AcademyRulesContent />}
+              </section>
               <section className="consent-document-page rounded-2xl border border-[#d8d2c8] p-5 sm:p-8"><PrivacyTermsContent consultation={consultation} /></section>
             </div>
           ) : null}
