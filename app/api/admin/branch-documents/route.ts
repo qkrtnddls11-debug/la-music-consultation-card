@@ -3,6 +3,12 @@ import { createAdminSupabase } from "@/lib/supabase-server";
 import { DEFAULT_BRANCH } from "@/lib/types";
 
 const BUCKET = "branch-documents";
+
+// 저장소는 한글·공백이 든 경로(key)를 거부한다 ("Invalid key: 수원 망포점/…" 오류의 원인).
+// 지점명을 영문 16진수 폴더명으로 바꿔 안전한 경로를 만든다.
+function branchFolder(branch: string) {
+  return `b-${Buffer.from(branch, "utf8").toString("hex").slice(0, 40)}`;
+}
 const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED = new Map<string, string>([
   ["application/pdf", "pdf"],
@@ -39,7 +45,7 @@ export async function POST(request: Request) {
         if ((Number(body.fileSize) || 0) > MAX_BYTES) {
           return Response.json({ error: "파일 용량은 10MB까지 가능합니다." }, { status: 400 });
         }
-        const path = `${encodeURIComponent(branch)}/rules-${Date.now()}.${extension}`;
+        const path = `${branchFolder(branch)}/rules-${Date.now()}.${extension}`;
         let signResult = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
         if (signResult.error) {
           // 버킷이 아직 없으면 만들어서 한 번 더 시도한다 (최초 1회 자가 설치).
@@ -56,7 +62,7 @@ export async function POST(request: Request) {
 
       if (body.action === "commit") {
         const path = String(body.path || "");
-        if (!path.startsWith(`${encodeURIComponent(branch)}/`)) {
+        if (!path.startsWith(`${branchFolder(branch)}/`)) {
           return Response.json({ error: "업로드 경로가 올바르지 않습니다." }, { status: 400 });
         }
         const { data: existing } = await supabase.from("branch_settings").select("rules_document_path").eq("branch_name", branch).maybeSingle();
@@ -94,7 +100,7 @@ export async function POST(request: Request) {
     const supabase = createAdminSupabase();
     const { data: existing } = await supabase.from("branch_settings").select("rules_document_path").eq("branch_name", branch).maybeSingle();
 
-    const path = `${encodeURIComponent(branch)}/rules-${Date.now()}.${extension}`;
+    const path = `${branchFolder(branch)}/rules-${Date.now()}.${extension}`;
     const buffer = Buffer.from(await file.arrayBuffer());
     const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, buffer, { contentType: file.type, cacheControl: "0", upsert: false });
     if (uploadError) {
