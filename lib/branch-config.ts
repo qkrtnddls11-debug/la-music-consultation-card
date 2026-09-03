@@ -41,22 +41,21 @@ export async function loadBranchRulesDocument(branch = DEFAULT_BRANCH): Promise<
   const fallback: BranchRulesDocument = { hasCustom: false, url: null, name: null, type: null, version: "기본판 2024-04-01" };
   try {
     const supabase = createAdminSupabase();
-    const { data, error } = await supabase
-      .from("branch_settings")
-      .select("rules_document_path,rules_document_name,rules_document_type,rules_document_updated_at")
-      .eq("branch_name", branch)
-      .maybeSingle();
-    const path = typeof data?.rules_document_path === "string" ? data.rules_document_path : "";
-    if (error || !path) return fallback;
+    // 기록은 DB 테이블 없이 저장소의 meta.json에 있다 (branch-documents 라우트와 같은 규칙).
+    const folder = `b-${Buffer.from(branch, "utf8").toString("hex").slice(0, 40)}`;
+    const { data: metaFile, error: metaError } = await supabase.storage.from("branch-documents").download(`${folder}/meta.json`);
+    if (metaError || !metaFile) return fallback;
+    const meta = JSON.parse(await metaFile.text()) as { path?: string; name?: string; type?: string; updatedAt?: string };
+    if (!meta.path) return fallback;
 
-    const { data: signed, error: signedError } = await supabase.storage.from("branch-documents").createSignedUrl(path, 60 * 60);
+    const { data: signed, error: signedError } = await supabase.storage.from("branch-documents").createSignedUrl(meta.path, 60 * 60);
     if (signedError || !signed?.signedUrl) return fallback;
     return {
       hasCustom: true,
       url: signed.signedUrl,
-      name: data?.rules_document_name || "학원규칙 동의서",
-      type: data?.rules_document_type || "application/pdf",
-      version: `업로드판 ${(data?.rules_document_updated_at || "").slice(0, 10)}`.trim()
+      name: meta.name || "학원규칙 동의서",
+      type: meta.type || "application/pdf",
+      version: `업로드판 ${(meta.updatedAt || "").slice(0, 10)}`.trim()
     };
   } catch {
     return fallback;

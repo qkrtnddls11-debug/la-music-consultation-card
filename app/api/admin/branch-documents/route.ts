@@ -9,6 +9,28 @@ const BUCKET = "branch-documents";
 function branchFolder(branch: string) {
   return `b-${Buffer.from(branch, "utf8").toString("hex").slice(0, 40)}`;
 }
+
+// 기록은 DB 테이블 없이 저장소 안의 meta.json에 남긴다 (별도 SQL 실행 불필요).
+type BranchDocMeta = { path?: string; name?: string; type?: string; updatedAt?: string };
+
+async function saveBranchDocMeta(supabase: ReturnType<typeof createAdminSupabase>, branch: string, meta: BranchDocMeta) {
+  const body = Buffer.from(JSON.stringify(meta), "utf8");
+  return supabase.storage.from(BUCKET).upload(`${branchFolder(branch)}/meta.json`, body, {
+    contentType: "application/json",
+    cacheControl: "0",
+    upsert: true
+  });
+}
+
+export async function readBranchDocMeta(supabase: ReturnType<typeof createAdminSupabase>, branch: string): Promise<BranchDocMeta> {
+  const { data, error } = await supabase.storage.from(BUCKET).download(`${branchFolder(branch)}/meta.json`);
+  if (error || !data) return {};
+  try {
+    return JSON.parse(await data.text()) as BranchDocMeta;
+  } catch {
+    return {};
+  }
+}
 const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED = new Map<string, string>([
   ["application/pdf", "pdf"],
@@ -65,23 +87,20 @@ export async function POST(request: Request) {
         if (!path.startsWith(`${branchFolder(branch)}/`)) {
           return Response.json({ error: "업로드 경로가 올바르지 않습니다." }, { status: 400 });
         }
-        const { data: existing } = await supabase.from("branch_settings").select("rules_document_path").eq("branch_name", branch).maybeSingle();
+        const previous = await readBranchDocMeta(supabase, branch);
         const updatedAt = new Date().toISOString();
-        const { error: saveError } = await supabase.from("branch_settings").upsert({
-          branch_name: branch,
-          rules_document_path: path,
-          rules_document_name: String(body.fileName || "규칙 문서").slice(0, 200),
-          rules_document_type: String(body.fileType || ""),
-          rules_document_updated_at: updatedAt,
-          updated_at: updatedAt
-        }, { onConflict: "branch_name" });
+        const { error: saveError } = await saveBranchDocMeta(supabase, branch, {
+          path,
+          name: String(body.fileName || "규칙 문서").slice(0, 200),
+          type: String(body.fileType || ""),
+          updatedAt
+        });
         if (saveError) {
           await supabase.storage.from(BUCKET).remove([path]).catch(() => undefined);
           console.error("branch document save failed", saveError.message);
-          return Response.json({ error: "파일 정보를 저장하지 못했습니다." }, { status: 502 });
+          return Response.json({ error: `파일 정보를 저장하지 못했습니다. (${saveError.message})` }, { status: 502 });
         }
-        const previousPath = (existing as { rules_document_path?: string | null } | null)?.rules_document_path;
-        if (previousPath && previousPath !== path) await supabase.storage.from(BUCKET).remove([previousPath]).catch(() => undefined);
+        if (previous.path && previous.path !== path) await supabase.storage.from(BUCKET).remove([previous.path]).catch(() => undefined);
         return Response.json({ ok: true, name: body.fileName || "규칙 문서", updatedAt });
       }
 
@@ -98,7 +117,7 @@ export async function POST(request: Request) {
     if (file.size > MAX_BYTES) return Response.json({ error: "파일 용량은 10MB까지 가능합니다." }, { status: 400 });
 
     const supabase = createAdminSupabase();
-    const { data: existing } = await supabase.from("branch_settings").select("rules_document_path").eq("branch_name", branch).maybeSingle();
+    const existing = await readBranchDocMeta(supabase, branch);
 
     const path = `${branchFolder(branch)}/rules-${Date.now()}.${extension}`;
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -109,23 +128,20 @@ export async function POST(request: Request) {
     }
 
     const updatedAt = new Date().toISOString();
-    const { error: saveError } = await supabase.from("branch_settings").upsert({
-      branch_name: branch,
-      rules_document_path: path,
-      rules_document_name: file.name.slice(0, 200),
-      rules_document_type: file.type,
-      rules_document_updated_at: updatedAt,
-      updated_at: updatedAt
-    }, { onConflict: "branch_name" });
+    const { error: saveError } = await saveBranchDocMeta(supabase, branch, {
+      path,
+      name: file.name.slice(0, 200),
+      type: file.type,
+      updatedAt
+    });
     if (saveError) {
       await supabase.storage.from(BUCKET).remove([path]);
       console.error("branch document save failed", saveError.message);
-      return Response.json({ error: "파일 정보를 저장하지 못했습니다." }, { status: 502 });
+      return Response.json({ error: `파일 정보를 저장하지 못했습니다. (${saveError.message})` }, { status: 502 });
     }
 
     // 이전 파일은 정리 (실패해도 새 파일 사용에는 지장 없음)
-    const previousPath = (existing as { rules_document_path?: string | null } | null)?.rules_document_path;
-    if (previousPath && previousPath !== path) await supabase.storage.from(BUCKET).remove([previousPath]).catch(() => undefined);
+    if (existing.path && existing.path !== path) await supabase.storage.from(BUCKET).remove([existing.path]).catch(() => undefined);
 
     return Response.json({ ok: true, name: file.name, updatedAt });
   } catch (error) {
@@ -139,19 +155,10 @@ export async function DELETE(request: Request) {
     if (!(await hasAdminSession())) return Response.json({ error: "인증이 필요합니다." }, { status: 401 });
     const branch = new URL(request.url).searchParams.get("branch")?.trim() || DEFAULT_BRANCH;
     const supabase = createAdminSupabase();
-    const { data } = await supabase.from("branch_settings").select("rules_document_path").eq("branch_name", branch).maybeSingle();
-    const path = (data as { rules_document_path?: string | null } | null)?.rules_document_path;
-
-    const { error } = await supabase.from("branch_settings").upsert({
-      branch_name: branch,
-      rules_document_path: null,
-      rules_document_name: null,
-      rules_document_type: null,
-      rules_document_updated_at: null,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "branch_name" });
-    if (error) return Response.json({ error: "기본판으로 되돌리지 못했습니다." }, { status: 502 });
-    if (path) await supabase.storage.from(BUCKET).remove([path]).catch(() => undefined);
+    const existing = await readBranchDocMeta(supabase, branch);
+    const { error } = await saveBranchDocMeta(supabase, branch, {});
+    if (error) return Response.json({ error: `기본판으로 되돌리지 못했습니다. (${error.message})` }, { status: 502 });
+    if (existing.path) await supabase.storage.from(BUCKET).remove([existing.path]).catch(() => undefined);
     return Response.json({ ok: true });
   } catch (error) {
     console.error("branch document delete failed", error);
