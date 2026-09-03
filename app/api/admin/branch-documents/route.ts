@@ -46,11 +46,12 @@ export async function POST(request: Request) {
           await supabase.storage.createBucket(BUCKET, { public: false }).catch(() => undefined);
           signResult = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
         }
-        if (signResult.error || !signResult.data) {
+        if (signResult.error || !signResult.data?.token) {
           console.error("branch document sign failed", signResult.error?.message);
           return Response.json({ error: `업로드 주소를 만들지 못했습니다. (${signResult.error?.message || "원인 미상"})` }, { status: 502 });
         }
-        return Response.json({ ok: true, path, signedUrl: signResult.data.signedUrl });
+        // 공식 방식: 브라우저는 supabase-js uploadToSignedUrl(path, token, file)로 올린다.
+        return Response.json({ ok: true, path, token: signResult.data.token });
       }
 
       if (body.action === "commit") {

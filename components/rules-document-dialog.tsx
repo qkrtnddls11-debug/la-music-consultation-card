@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 type DocumentState = { hasCustom: boolean; name: string | null; version: string } | null;
 
@@ -31,15 +32,18 @@ export function RulesDocumentDialog({ onClose, branchName }: { onClose: () => vo
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "sign", branch: branchName || "", fileName: file.name, fileType: file.type, fileSize: file.size })
       });
-      const signData = await signResponse.json().catch(() => ({})) as { error?: string; path?: string; signedUrl?: string };
-      if (!signResponse.ok || !signData.path || !signData.signedUrl) throw new Error(signData.error || "업로드를 준비하지 못했습니다.");
+      const signData = await signResponse.json().catch(() => ({})) as { error?: string; path?: string; token?: string };
+      if (!signResponse.ok || !signData.path || !signData.token) throw new Error(signData.error || "업로드를 준비하지 못했습니다.");
 
-      const putResponse = await fetch(signData.signedUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file
-      });
-      if (!putResponse.ok) throw new Error("파일을 저장소에 올리지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.");
+      // 수파베이스 공식 업로드: 발급받은 토큰으로 저장소에 직접 올린다 (서버 용량 한도와 무관).
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ""
+      );
+      const { error: uploadError } = await supabase.storage
+        .from("branch-documents")
+        .uploadToSignedUrl(signData.path, signData.token, file, { contentType: file.type || "application/octet-stream" });
+      if (uploadError) throw new Error(`파일을 저장소에 올리지 못했습니다. (${uploadError.message})`);
 
       const commitResponse = await fetch("/api/admin/branch-documents", {
         method: "POST",
