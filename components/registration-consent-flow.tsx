@@ -26,6 +26,73 @@ function ChoiceButtons({ value, onChange, label }: { value: ConsentChoice | ""; 
   );
 }
 
+// PDF를 브라우저 기본 뷰어(회색 툴바) 대신 페이지 그림으로 변환해 이미지처럼 보여주는 리더.
+// pdf.js를 CDN에서 불러오며, 실패하면 기존 iframe으로 대체된다.
+function PdfPagesReader({ url }: { url: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function render() {
+      try {
+        const pdfjsWindow = window as unknown as { pdfjsLib?: any };
+        if (!pdfjsWindow.pdfjsLib) {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("pdfjs load failed"));
+            document.head.appendChild(script);
+          });
+        }
+        const pdfjs = (window as unknown as { pdfjsLib: any }).pdfjsLib;
+        pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        const pdf = await pdfjs.getDocument({ url }).promise;
+        const container = containerRef.current;
+        if (!container || cancelled) return;
+        container.innerHTML = "";
+        const width = container.clientWidth || 640;
+        const scaleBoost = Math.min(window.devicePixelRatio || 1, 2);
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+          const page = await pdf.getPage(pageNumber);
+          if (cancelled) return;
+          const baseViewport = page.getViewport({ scale: 1 });
+          const scale = (width / baseViewport.width) * scaleBoost;
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          canvas.style.width = "100%";
+          canvas.style.display = "block";
+          canvas.style.marginBottom = "12px";
+          const context = canvas.getContext("2d");
+          if (!context) continue;
+          await page.render({ canvasContext: context, viewport }).promise;
+          if (cancelled) return;
+          container.appendChild(canvas);
+        }
+        if (!cancelled) setLoading(false);
+      } catch {
+        if (!cancelled) { setFailed(true); setLoading(false); }
+      }
+    }
+    void render();
+    return () => { cancelled = true; };
+  }, [url]);
+
+  if (failed) {
+    return <iframe src={url} title="학원규칙 동의서" className="h-[57dvh] min-h-[380px] w-full rounded-xl" />;
+  }
+  return (
+    <div className="h-[57dvh] min-h-[380px] overflow-y-auto">
+      {loading ? <p className="p-6 text-center text-sm font-bold text-[#8a8378]">문서를 불러오는 중...</p> : null}
+      <div ref={containerRef} />
+    </div>
+  );
+}
+
 export function RegistrationConsentFlow({ consultation, onClose, onComplete, submitUrl = "/api/admin/consents", publicLink = false, branchName }: {
   consultation: ConsentConsultation;
   onClose: () => void;
@@ -150,7 +217,7 @@ export function RegistrationConsentFlow({ consultation, onClose, onComplete, sub
               <div className="rounded-2xl border border-[#d8d2c8] bg-white p-2 shadow-inner">
                 {(rulesDocument.type || "").startsWith("image/")
                   ? <div className="h-[57dvh] min-h-[380px] overflow-y-auto"><img src={rulesDocument.url} alt="학원규칙 동의서" className="w-full" /></div>
-                  : <iframe src={rulesDocument.url} title="학원규칙 동의서" className="h-[57dvh] min-h-[380px] w-full rounded-xl" />}
+                  : <PdfPagesReader url={rulesDocument.url} />}
                 <a href={rulesDocument.url} target="_blank" rel="noreferrer" className="mt-2 flex min-h-12 items-center justify-center rounded-xl bg-[#eee9e0] text-sm font-extrabold text-[#4a453d]">새 창에서 크게 보기</a>
               </div>
             ) : (
