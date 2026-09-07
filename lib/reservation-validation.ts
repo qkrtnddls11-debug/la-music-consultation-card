@@ -83,3 +83,40 @@ export function normalizeReservation(value: unknown): { data?: ReservationInput;
 export function validReservationId(value: string) {
   return UUID_PATTERN.test(value);
 }
+
+// 관리자 화면에서 예약의 인적정보만 고칠 때 쓴다. 보낸 칸만 검사하고, 안 보낸 칸은 건드리지 않는다.
+// (예약 전체 검증인 normalizeReservation 을 그대로 쓰면 안 고친 칸까지 다시 요구해 저장이 막힌다)
+export function normalizeReservationPatch(value: unknown): { data?: Partial<ReservationInput>; error?: string } {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const data: Partial<ReservationInput> = {};
+  if ("name" in source) {
+    const name = clean(source.name, 80);
+    if (!name) return { error: "성함을 입력해 주세요." };
+    data.name = name;
+  }
+  if ("phone" in source) {
+    const phone = clean(source.phone, 20);
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length !== 10 && digits.length !== 11) return { error: "전화번호를 10~11자리로 입력해 주세요." };
+    data.phone = phone;
+  }
+  if ("gender" in source) data.gender = clean(source.gender, 10);
+  if ("birth_date" in source) {
+    const birth = clean(source.birth_date, 10);
+    if (birth && !/^\d{4}-\d{2}-\d{2}$/.test(birth)) return { error: "생년월일 형식이 올바르지 않습니다." };
+    data.birth_date = birth;
+  }
+  if ("subjects" in source) {
+    const subjects = cleanSubjects(source.subjects);
+    if (subjects.length === 0) return { error: "희망 과목을 하나 이상 선택해 주세요." };
+    data.subjects = subjects;
+  }
+  if ("lesson_type" in source) {
+    const lessonType = clean(source.lesson_type, 10);
+    if (lessonType !== "입시" && lessonType !== "취미" && lessonType !== "") return { error: "수업 유형은 입시 또는 취미입니다." };
+    data.lesson_type = lessonType as ReservationInput["lesson_type"];
+  }
+  if ("schedule_note" in source) data.schedule_note = clean(source.schedule_note, 500);
+  return { data };
+}
+

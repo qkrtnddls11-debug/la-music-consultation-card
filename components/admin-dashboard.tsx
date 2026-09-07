@@ -21,7 +21,7 @@ import type {
   ReservationRecord,
   VocalDiagnosisRecord,
 } from "@/lib/types";
-import { DEFAULT_BRANCH } from "@/lib/types";
+import { DEFAULT_BRANCH, SUBJECT_OPTIONS } from "@/lib/types";
 
 type AuthState = "checking" | "signed-out" | "signed-in";
 type CardFilter = "전체" | "일반" | "입시";
@@ -222,6 +222,45 @@ function TrialSlotEditor({ slot, options, disabled, idPrefix, ownName, onChange 
           return <option key={name} value={name} disabled={Boolean(occupant) && name !== slot.room}>{name}{occupant ? ` (${busyLabel(occupant)})` : ""}</option>;
         })}
       </select>
+    </div>
+  </div>;
+}
+
+type ReservationInfoFields = { name: string; phone: string; gender: string; birth_date: string; lesson_type: "입시" | "취미" | ""; subjects: string[]; schedule_note: string };
+
+// 예약의 인적정보(이름·전화·과목 등)를 카드에서 바로 고친다.
+// 링크로 접수된 예약은 부모가 직접 적어 오타가 잦은데, 지금까지는 지우고 다시 받는 수밖에 없었다.
+function ReservationInfoEditor({ record, busy, onSave, onCancel }: { record: ReservationRecord; busy: boolean; onSave: (fields: ReservationInfoFields) => void; onCancel: () => void }) {
+  const [fields, setFields] = useState<ReservationInfoFields>({
+    name: record.name, phone: record.phone, gender: record.gender || "", birth_date: record.birth_date || "",
+    lesson_type: record.lesson_type || "", subjects: [...record.subjects], schedule_note: record.schedule_note || ""
+  });
+  const subjectOptions = Array.from(new Set([...SUBJECT_OPTIONS, ...record.subjects]));
+  const set = <K extends keyof ReservationInfoFields>(key: K, value: ReservationInfoFields[K]) => setFields((current) => ({ ...current, [key]: value }));
+  const toggleSubject = (subject: string) => set("subjects", fields.subjects.includes(subject) ? fields.subjects.filter((item) => item !== subject) : [...fields.subjects, subject]);
+  const inputClass = "min-h-12 w-full rounded-xl border border-[#e4ded4] bg-white px-3 text-sm text-[#4a453d] outline-none focus:border-[#e8a23d]";
+  const phoneDigits = fields.phone.replace(/\D/g, "");
+  const invalid = !fields.name.trim() ? "성함을 입력해 주세요." : (phoneDigits.length !== 10 && phoneDigits.length !== 11) ? "전화번호를 10~11자리로 입력해 주세요." : fields.subjects.length === 0 ? "희망 과목을 하나 이상 선택해 주세요." : "";
+  return <div className="rounded-xl border-[1.5px] border-[#e8a23d]/70 bg-white p-3">
+    <p className="text-sm font-black text-[#b76e08]">✏️ 예약 정보 수정</p>
+    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+      <label className="text-xs font-bold text-[#6b6459]">이름<input value={fields.name} onChange={(event) => set("name", event.target.value)} disabled={busy} className={`mt-1 ${inputClass}`} /></label>
+      <label className="text-xs font-bold text-[#6b6459]">전화번호<input value={fields.phone} onChange={(event) => set("phone", event.target.value)} disabled={busy} inputMode="tel" className={`mt-1 ${inputClass}`} /></label>
+      <label className="text-xs font-bold text-[#6b6459]">성별<select value={fields.gender} onChange={(event) => set("gender", event.target.value)} disabled={busy} className={`mt-1 ${inputClass}`}><option value="">선택 안 함</option><option value="남">남</option><option value="여">여</option></select></label>
+      <label className="text-xs font-bold text-[#6b6459]">생년월일<input value={fields.birth_date} onChange={(event) => set("birth_date", event.target.value)} disabled={busy} placeholder="2010-03-15" className={`mt-1 ${inputClass}`} /></label>
+      <label className="text-xs font-bold text-[#6b6459]">수업 유형<select value={fields.lesson_type} onChange={(event) => set("lesson_type", event.target.value as ReservationInfoFields["lesson_type"])} disabled={busy} className={`mt-1 ${inputClass}`}><option value="">선택 안 함</option><option value="취미">취미</option><option value="입시">입시</option></select></label>
+    </div>
+    <p className="mt-3 text-xs font-bold text-[#6b6459]">희망 과목</p>
+    <div className="mt-1 flex flex-wrap gap-1.5">
+      {subjectOptions.map((subject) => (
+        <button key={subject} type="button" disabled={busy} onClick={() => toggleSubject(subject)} className={`min-h-10 rounded-lg px-3 text-sm font-bold ${fields.subjects.includes(subject) ? "bg-[#2b2723] text-white" : "border border-[#e4ded4] bg-[#faf9f6] text-[#6b6459]"}`}>{subject}</button>
+      ))}
+    </div>
+    <label className="mt-3 block text-xs font-bold text-[#6b6459]">참고 메모<textarea value={fields.schedule_note} onChange={(event) => set("schedule_note", event.target.value)} disabled={busy} rows={2} className={`mt-1 ${inputClass} min-h-0 py-2`} /></label>
+    {invalid ? <p className="mt-2 text-xs font-bold text-red-700">{invalid}</p> : null}
+    <div className="mt-3 flex flex-wrap gap-2">
+      <button type="button" disabled={busy || Boolean(invalid)} onClick={() => onSave(fields)} className="min-h-12 rounded-xl bg-[#e8a23d] px-5 text-sm font-black text-[#2b2723] disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button>
+      <button type="button" disabled={busy} onClick={onCancel} className="min-h-12 rounded-xl border border-[#e4ded4] bg-white px-4 text-sm font-bold text-[#6b6459]">취소</button>
     </div>
   </div>;
 }
@@ -634,6 +673,24 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
     setAuth("signed-out");
   }
 
+  const [editingInfoId, setEditingInfoId] = useState("");
+  // 인적정보만 보낸다. 확정일시·배정은 서버가 건드리지 않는다.
+  async function updateReservationInfo(record: ReservationRecord, fields: ReservationInfoFields) {
+    setUpdatingId(record.id); setLoadError("");
+    try {
+      const response = await fetch(`/api/admin/reservations/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields)
+      });
+      const result = await response.json() as ReservationRecord | { error?: string };
+      if (!response.ok || !("id" in result)) throw new Error("error" in result && result.error ? result.error : "예약 정보를 저장하지 못했습니다.");
+      setReservations((current) => current.map((item) => item.id === result.id ? result : item));
+      setEditingInfoId("");
+    } catch (error) { setLoadError(error instanceof Error ? error.message : "예약 정보를 저장하지 못했습니다."); }
+    finally { setUpdatingId(""); }
+  }
+
   async function updateReservationSlots(record: ReservationRecord, slots: EditableSlot[]) {
     setUpdatingId(record.id); setLoadError("");
     try {
@@ -954,10 +1011,19 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {!teacherMode ? <button type="button" onClick={() => setEditingInfoId(editingInfoId === reservation.id ? "" : reservation.id)} className="min-h-12 rounded-xl border border-[#e8a23d] bg-white px-4 text-sm font-extrabold text-[#b76e08]">{editingInfoId === reservation.id ? "수정 닫기" : "수정"}</button> : null}
                   <Link href={`/consult?reservation_id=${reservation.id}`} className="flex min-h-12 items-center rounded-xl bg-[#2b2723] px-5 text-sm font-black text-white">상담 시작 →</Link>
                   {!teacherMode ? <button type="button" disabled={deletingKey === `reservation:${reservation.id}`} onClick={() => void deleteRecord("reservation", reservation.id, reservation.name)} className="min-h-12 rounded-xl border border-red-200 bg-red-50 px-4 text-sm font-extrabold text-red-700 disabled:opacity-50">{deletingKey === `reservation:${reservation.id}` ? "삭제 중…" : "예약 삭제"}</button> : null}
                 </div>
               </div>
+              {editingInfoId === reservation.id ? (
+                <div className="mt-3 space-y-3">
+                  <ReservationInfoEditor record={reservation} busy={updatingId === reservation.id} onSave={(fields) => void updateReservationInfo(reservation, fields)} onCancel={() => setEditingInfoId("")} />
+                  <div className="rounded-xl border-[1.5px] border-[#e8a23d]/70 bg-white p-3">
+                    <ReservationConfirmEditor record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(slots) => void updateReservationSlots(reservation, slots)} />
+                  </div>
+                </div>
+              ) : null}
             </article>
           ))}
           {!loading && filtered.length === 0 && completedPendingReservations.length === 0 ? (
@@ -1029,6 +1095,8 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                     <p className="mt-2 text-xs text-[#9a9389]">접수 {formatCreatedAt(reservation.created_at)}</p>
                   </div>
                   <div className="w-full max-w-sm space-y-3 sm:w-[310px]">
+                    {!teacherMode ? <button type="button" onClick={() => setEditingInfoId(editingInfoId === reservation.id ? "" : reservation.id)} className="min-h-12 w-full rounded-xl border border-[#e8a23d] bg-white px-4 text-sm font-extrabold text-[#b76e08]">{editingInfoId === reservation.id ? "정보 수정 닫기" : "이름·전화·과목 수정"}</button> : null}
+                    {editingInfoId === reservation.id ? <ReservationInfoEditor record={reservation} busy={updatingId === reservation.id} onSave={(fields) => void updateReservationInfo(reservation, fields)} onCancel={() => setEditingInfoId("")} /> : null}
                     <ReservationConfirmEditor key={`${reservation.confirmed_at ?? "empty"}-${JSON.stringify(reservation.trial_slots ?? [])}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`} record={reservation} busy={updatingId === reservation.id} options={crmOptions} onSave={(slots) => void updateReservationSlots(reservation, slots)} onDirtyChange={(dirty) => setUnsavedTrialIds((current) => (dirty ? (current.includes(reservation.id) ? current : [...current, reservation.id]) : (current.includes(reservation.id) ? current.filter((id) => id !== reservation.id) : current)))} />
                     {linked ? <button type="button" onClick={() => { setView("consultations"); setSelected(linked); }} className="min-h-12 w-full rounded-xl bg-emerald-100 px-4 text-sm font-black text-emerald-900">완료된 상담 보기</button>
                       : unsavedTrialIds.includes(reservation.id)
