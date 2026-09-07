@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BirthDateFields } from "@/components/birth-date-fields";
 import { ConsentDetailModal } from "@/components/consent-detail-modal";
+import { CrmAssistPanel } from "@/components/crm-assist-panel";
 import { ConsultationLinkDialog } from "@/components/consultation-link-dialog";
 import { RegistrationConsentFlow } from "@/components/registration-consent-flow";
 import { RulesDocumentDialog } from "@/components/rules-document-dialog";
@@ -1071,6 +1072,8 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
           </section>
         )}
       </div>
+
+      {!teacherMode ? <CrmAssistPanel branch={branchFilter} /> : null}
 
       {selected ? <ConsultationDetail record={selected} reservation={selected.reservation_id ? reservationById.get(selected.reservation_id) : undefined} diagnosis={diagnosisByConsultation.get(selected.id)} consent={consentByConsultation.get(selected.id)} consentRequest={latestRequestByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id || deletingKey === `consultation:${selected.id}`} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onConsent={() => { const consent = consentByConsultation.get(selected.id); if (consent) setConsentViewer({ consentId: consent.id, consultation: selected }); }} onSignatureLink={() => { setSignatureRecord(selected); setSelected(null); }} onRecordUpdate={(record) => { setRecords((current) => current.map((item) => item.id === record.id ? record : item)); setSelected(record); }} onStatus={(status) => void updateStatus(selected, status)} onDelete={() => void deleteRecord("consultation", selected.id, selected.name)} /> : null}
       {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} branchName={branchFilter} /> : null}
