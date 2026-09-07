@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 type AssistRange = { from: string; to: string; rooms: string[] };
 type AssistHit = { name: string; subject: string; ranges: AssistRange[] };
 type AssistAnswer = {
+  ok?: boolean;
+  reason?: string;
   kind?: string;
   text?: string;
   date?: string;
@@ -105,8 +107,10 @@ export function CrmAssistPanel({ branch }: { branch: string }) {
               );
             }
             const answer = message.answer || {};
-            if (answer.error) {
-              return <p key={index} className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{answer.error}</p>;
+            // CRM 이 "왜 못 했는지"(reason)를 보내면 그대로 보여준다. 숨기면 원인을 알 수 없다.
+            const failure = answer.error || (answer.ok === false ? answer.reason : "");
+            if (failure) {
+              return <p key={index} className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{failure}</p>;
             }
             if (answer.kind !== "availability") {
               return (
