@@ -1196,6 +1196,8 @@ function ConsultationDetail({
   const [memo, setMemo] = useState(record.admin_memo || "");
   const [memoBusy, setMemoBusy] = useState(false);
   const [memoMessage, setMemoMessage] = useState("");
+  const [tidyBusy, setTidyBusy] = useState(false);
+  const [tidyDraft, setTidyDraft] = useState("");
   const [renderedAt] = useState(() => Date.now());
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1218,6 +1220,28 @@ function ConsultationDetail({
       onRecordUpdate({ ...record, admin_memo: memo }); setMemoMessage("저장되었습니다");
     } catch (error) { setMemoMessage(error instanceof Error ? error.message : "관리자 메모를 저장하지 못했습니다."); }
     finally { setMemoBusy(false); }
+  }
+
+  // AI 정리: 메모를 항목별로 다듬은 초안을 받아 보여주기만 한다. 메모 칸에 넣는 것은 사람이 「이대로 바꾸기」를 눌러야 한다.
+  async function tidyMemo() {
+    if (!memo.trim() || tidyBusy) return;
+    setTidyBusy(true); setMemoMessage(""); setTidyDraft("");
+    try {
+      const response = await fetch("/api/assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          branch: record.branch_name,
+          task: "tidy_memo",
+          memo,
+          student: { name: record.name, subjects: record.subjects, cardType: record.card_type, purpose: record.purpose }
+        })
+      });
+      const result = await response.json() as { ok?: boolean; text?: string; reason?: string; error?: string };
+      if (!response.ok || !result.ok || !result.text) throw new Error(result.error || result.reason || "AI 정리를 받지 못했습니다.");
+      setTidyDraft(result.text);
+    } catch (error) { setMemoMessage(error instanceof Error ? error.message : "AI 정리를 받지 못했습니다."); }
+    finally { setTidyBusy(false); }
   }
 
   const lesson = safeLesson(record.lesson_experience);
@@ -1319,7 +1343,17 @@ function ConsultationDetail({
               <p className="mt-2 text-sm leading-6 text-[#6b6459]">연결된 예약이 없어 체험수업을 잡을 수 없습니다. 예약 화면에서 이 학생의 예약을 만들면 여기서 배정할 수 있습니다.</p>
             )}
           </section>
-          <section className="mt-6 rounded-[16px] bg-[#2b2723] p-4 text-white"><label htmlFor="detail-admin-memo" className="font-black">관리자 메모</label><textarea id="detail-admin-memo" value={memo} onChange={(event) => setMemo(event.target.value)} className="mt-2 min-h-[150px] w-full resize-y rounded-xl bg-white p-3 text-[#2b2723] focus:outline-none" placeholder="상담 중 기록한 관리자 메모" /><div className="mt-3 flex items-center gap-3"><button type="button" disabled={memoBusy || memo === (record.admin_memo || "")} onClick={() => void saveMemo()} className="min-h-12 rounded-xl bg-[#e8a23d] px-5 font-black text-[#2b2723] disabled:opacity-50">{memoBusy ? "저장 중…" : "메모 저장"}</button>{memoMessage ? <p className="text-sm font-bold text-[#f4cf91]">{memoMessage}</p> : null}</div></section>
+          <section className="mt-6 rounded-[16px] bg-[#2b2723] p-4 text-white"><label htmlFor="detail-admin-memo" className="font-black">관리자 메모</label><textarea id="detail-admin-memo" value={memo} onChange={(event) => setMemo(event.target.value)} className="mt-2 min-h-[150px] w-full resize-y rounded-xl bg-white p-3 text-[#2b2723] focus:outline-none" placeholder="상담 중 기록한 관리자 메모" />{tidyDraft ? (
+            <div className="mt-3 rounded-xl border border-violet-300/60 bg-[#3a3430] p-3">
+              <p className="text-xs font-black text-violet-200">AI 가 정리한 초안 — 확인하고 마음에 들면 아래 「이대로 바꾸기」를 누른 뒤 「메모 저장」</p>
+              <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-white">{tidyDraft}</pre>
+              <div className="mt-2 flex gap-2">
+                <button type="button" onClick={() => { setMemo(tidyDraft); setTidyDraft(""); setMemoMessage("메모 칸에 넣었습니다. 「메모 저장」을 눌러야 저장됩니다."); }} className="min-h-10 rounded-lg bg-violet-200 px-4 text-sm font-black text-[#2b2723]">이대로 바꾸기</button>
+                <button type="button" onClick={() => setTidyDraft("")} className="min-h-10 rounded-lg border border-white/30 px-4 text-sm font-bold text-white/80">버리기</button>
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" disabled={memoBusy || memo === (record.admin_memo || "")} onClick={() => void saveMemo()} className="min-h-12 rounded-xl bg-[#e8a23d] px-5 font-black text-[#2b2723] disabled:opacity-50">{memoBusy ? "저장 중…" : "메모 저장"}</button><button type="button" disabled={tidyBusy || !memo.trim()} onClick={() => void tidyMemo()} className="min-h-12 rounded-xl border border-violet-300/70 bg-violet-200/10 px-4 font-black text-violet-100 disabled:opacity-50"><span className="mr-1.5 rounded-md bg-violet-200 px-1.5 py-0.5 text-[10px] font-black text-[#2b2723]">AI</span>{tidyBusy ? "정리 중…" : "AI로 정리"}</button>{memoMessage ? <p className="text-sm font-bold text-[#f4cf91]">{memoMessage}</p> : null}</div></section>
           <button type="button" disabled={busy} onClick={onDelete} className="mt-5 min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-extrabold text-red-700 disabled:opacity-50">{busy ? "처리 중…" : "이 상담 기록 삭제"}</button>
         </div>
       </section>

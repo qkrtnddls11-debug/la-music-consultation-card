@@ -23,7 +23,18 @@ export async function POST(request: Request) {
       subject: String(body.subject || ""),
       fromTime: String(body.fromTime || ""),
       toTime: String(body.toTime || ""),
-      today: new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" })
+      today: new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }),
+      // 관리자 메모 정리: 메모와 학생 기본 정보만 넘긴다 (연락처는 보내지 않는다)
+      ...(body.task === "tidy_memo" ? {
+        task: "tidy_memo",
+        memo: String(body.memo || "").slice(0, 4000),
+        student: {
+          name: String(body.student?.name || "").slice(0, 40),
+          subjects: Array.isArray(body.student?.subjects) ? body.student.subjects.map(String).slice(0, 8) : [],
+          cardType: String(body.student?.cardType || "").slice(0, 10),
+          purpose: String(body.student?.purpose || "").slice(0, 100)
+        }
+      } : {})
     };
 
     const controller = new AbortController();
