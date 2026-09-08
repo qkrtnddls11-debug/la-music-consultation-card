@@ -1201,6 +1201,8 @@ function ConsultationDetail({
   const [tidyDraft, setTidyDraft] = useState("");
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [summaryMessage, setSummaryMessage] = useState("");
+  const [summary, setSummary] = useState(record.ai_summary || "");
+  const [summarySaving, setSummarySaving] = useState(false);
   const [renderedAt] = useState(() => Date.now());
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1255,9 +1257,23 @@ function ConsultationDetail({
       const response = await fetch(`/api/admin/consultations/${record.id}/summary`, { method: "POST" });
       const result = await response.json() as { ok?: boolean; ai_summary?: string; error?: string };
       if (!response.ok || !result.ai_summary) throw new Error(result.error || "AI 요약을 받지 못했습니다.");
+      setSummary(result.ai_summary);
       onRecordUpdate({ ...record, ai_summary: result.ai_summary });
+      setSummaryMessage("AI 가 만든 정리를 저장했습니다. 고치고 싶으면 글을 바꾼 뒤 「정리 저장」");
     } catch (error) { setSummaryMessage(error instanceof Error ? error.message : "AI 요약을 받지 못했습니다."); }
     finally { setSummaryBusy(false); }
+  }
+
+  // 실장이 손으로 고친 정리를 저장한다
+  async function saveSummary() {
+    setSummarySaving(true); setSummaryMessage("");
+    try {
+      const response = await fetch(`/api/admin/consultations/${record.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ai_summary: summary }) });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "정리를 저장하지 못했습니다.");
+      onRecordUpdate({ ...record, ai_summary: summary }); setSummaryMessage("저장되었습니다");
+    } catch (error) { setSummaryMessage(error instanceof Error ? error.message : "정리를 저장하지 못했습니다."); }
+    finally { setSummarySaving(false); }
   }
 
   const lesson = safeLesson(record.lesson_experience);
@@ -1313,24 +1329,8 @@ function ConsultationDetail({
         </header>
         <div className="p-5 sm:p-6">
           <section className="mb-5 rounded-[16px] border border-[#ded8cf] bg-[#f7f4ee] p-4"><h3 className="font-black">학생 흐름 연결</h3><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs font-extrabold"><div className={`rounded-xl p-3 ${reservation ? "bg-sky-100 text-sky-900" : "bg-white text-[#8a8378]"}`}>예약<br />{reservation ? reservation.status : "없음(바로 방문)"}</div><div className={`rounded-xl p-3 ${diagnosis ? "bg-violet-100 text-violet-900" : "bg-white text-[#8a8378]"}`}>보컬 진단서<br />{record.subjects.includes("보컬") ? diagnosis ? "작성됨" : "미작성" : "해당 없음"}</div><div className={`rounded-xl p-3 ${consent ? "bg-emerald-100 text-emerald-900" : consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "bg-amber-100 text-amber-900" : "bg-white text-[#8a8378]"}`}>등록 동의서<br />{consent ? "완료" : consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "서명 대기 중" : "미요청"}</div></div>{reservation ? <div className="mt-3 text-sm leading-6 text-[#5f584e]"><p><strong>예약 접수:</strong> {formatCreatedAt(reservation.created_at)} · {reservation.lesson_type} · {reservation.source === "link" ? "링크" : "현장"}</p><p><strong>확정 일시:</strong> {reservation.confirmed_at ? formatCreatedAt(reservation.confirmed_at) : "미정"}</p><p><strong>예약 희망 시간:</strong> {reservation.schedule_preferences.filter((item) => item.days?.length || item.day || item.timeSlot || item.timeText).map((item) => `${item.rank}순위 ${reservationScheduleLabel(item)}`).join(" / ")}</p>{reservation.schedule_note ? <p><strong>예약 참고사항:</strong> {reservation.schedule_note}</p> : null}</div> : null}</section>
-          {record.subjects.includes("보컬") ? (
-            <button type="button" disabled={diagnosisBusy} onClick={onDiagnosis} className="mb-4 min-h-14 w-full rounded-[14px] bg-violet-100 px-5 text-base font-extrabold text-violet-900 disabled:opacity-50">
-              {diagnosisBusy ? "진단서 여는 중…" : diagnosis ? "보컬 진단서 보기·수정" : "보컬 진단서 작성"}
-            </button>
-          ) : null}
-          {consent ? (
-            <button type="button" onClick={onConsent} className="mb-4 min-h-14 w-full rounded-[14px] bg-emerald-100 px-5 text-base font-extrabold text-emerald-900">등록 동의서 보기 · 인쇄</button>
-          ) : null}
-          {!consent ? <button type="button" onClick={onSignatureLink} className="mb-4 min-h-14 w-full rounded-[14px] bg-sky-100 px-5 text-base font-extrabold text-sky-900">{consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "서명 링크 재발급 · QR" : "서명 링크 만들기 · QR"}</button> : null}
-          <div className="mb-6 flex gap-2 rounded-[14px] bg-[#f7f4ee] p-2">
-            <button type="button" disabled={busy} onClick={() => onStatus("상담")} className={`min-h-12 flex-1 rounded-xl text-sm font-extrabold ${record.status === "상담" ? "bg-white text-amber-800 shadow-sm" : "text-[#6b6459]"}`}>상담만 함</button>
-            <button type="button" disabled={busy} onClick={() => onStatus("등록")} className={`min-h-12 flex-1 rounded-xl text-sm font-extrabold ${record.status === "등록" ? "bg-[#2b2723] text-white shadow-sm" : "text-[#6b6459]"}`}>{record.status === "등록" && !consent ? "동의서 받기" : "등록함"}</button>
-          </div>
-          <dl className="grid grid-cols-[105px_1fr] gap-x-4 gap-y-3 text-[0.95rem] sm:grid-cols-[128px_1fr]">
-            {rows.map(([label, value]) => value ? <div key={label} className="contents"><dt className="font-bold text-[#6b6459]">{label}</dt><dd className="whitespace-pre-line break-words leading-relaxed">{value}</dd></div> : null)}
-          </dl>
           {/* 체험수업 배정: 상담 기록에서도 바로 고친다. 상담이 끝난 뒤 체험 날짜가 바뀌는 일이 잦다. */}
-          <section className="mt-6 rounded-[16px] border-[1.5px] border-[#e8a23d]/70 bg-amber-50 p-4">
+          <section className="mb-5 rounded-[16px] border-[1.5px] border-[#e8a23d]/70 bg-amber-50 p-4">
             <h3 className="font-black text-[#b76e08]">🎯 체험수업 배정</h3>
             {reservation ? (
               <>
@@ -1359,21 +1359,39 @@ function ConsultationDetail({
               <p className="mt-2 text-sm leading-6 text-[#6b6459]">연결된 예약이 없어 체험수업을 잡을 수 없습니다. 예약 화면에서 이 학생의 예약을 만들면 여기서 배정할 수 있습니다.</p>
             )}
           </section>
-          {/* 학생 정보 정리(AI): 학생이 적어 낸 것들을 관리자가 10초 안에 파악하도록 요약. 관리자 메모 바로 위에 둔다. */}
+          {record.subjects.includes("보컬") ? (
+            <button type="button" disabled={diagnosisBusy} onClick={onDiagnosis} className="mb-4 min-h-14 w-full rounded-[14px] bg-violet-100 px-5 text-base font-extrabold text-violet-900 disabled:opacity-50">
+              {diagnosisBusy ? "진단서 여는 중…" : diagnosis ? "보컬 진단서 보기·수정" : "보컬 진단서 작성"}
+            </button>
+          ) : null}
+          {consent ? (
+            <button type="button" onClick={onConsent} className="mb-4 min-h-14 w-full rounded-[14px] bg-emerald-100 px-5 text-base font-extrabold text-emerald-900">등록 동의서 보기 · 인쇄</button>
+          ) : null}
+          {!consent ? <button type="button" onClick={onSignatureLink} className="mb-4 min-h-14 w-full rounded-[14px] bg-sky-100 px-5 text-base font-extrabold text-sky-900">{consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "서명 링크 재발급 · QR" : "서명 링크 만들기 · QR"}</button> : null}
+          <div className="mb-6 flex gap-2 rounded-[14px] bg-[#f7f4ee] p-2">
+            <button type="button" disabled={busy} onClick={() => onStatus("상담")} className={`min-h-12 flex-1 rounded-xl text-sm font-extrabold ${record.status === "상담" ? "bg-white text-amber-800 shadow-sm" : "text-[#6b6459]"}`}>상담만 함</button>
+            <button type="button" disabled={busy} onClick={() => onStatus("등록")} className={`min-h-12 flex-1 rounded-xl text-sm font-extrabold ${record.status === "등록" ? "bg-[#2b2723] text-white shadow-sm" : "text-[#6b6459]"}`}>{record.status === "등록" && !consent ? "동의서 받기" : "등록함"}</button>
+          </div>
+          <h3 className="mb-3 font-black">학생 개인정보</h3>
+          <dl className="grid grid-cols-[105px_1fr] gap-x-4 gap-y-3 text-[0.95rem] sm:grid-cols-[128px_1fr]">
+            {rows.map(([label, value]) => value ? <div key={label} className="contents"><dt className="font-bold text-[#6b6459]">{label}</dt><dd className="whitespace-pre-line break-words leading-relaxed">{value}</dd></div> : null)}
+          </dl>
+          {/* 학생 정보 정리: 학생이 적어 낸 것들을 AI 가 요약해 채우고, 실장이 고쳐서 저장한다. 관리자 메모 바로 위. */}
           <section className="mt-6 rounded-[16px] border-[1.5px] border-violet-300 bg-violet-50 p-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-md bg-violet-200 px-1.5 py-0.5 text-[10px] font-black text-[#2b2723]">AI</span>
-              <h3 className="font-black text-violet-900">학생 정보 정리</h3>
+              <label htmlFor="detail-summary" className="font-black text-violet-900">학생 정보 정리</label>
               <button type="button" disabled={summaryBusy} onClick={() => void regenerateSummary()} className="ml-auto min-h-10 rounded-lg border border-violet-300 bg-white px-3 text-xs font-black text-violet-900 disabled:opacity-50">
-                {summaryBusy ? "만드는 중…" : record.ai_summary ? "다시 만들기" : "요약 만들기"}
+                {summaryBusy ? "만드는 중…" : summary ? "AI로 다시 만들기" : "AI로 만들기"}
               </button>
             </div>
-            {record.ai_summary
-              ? <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-[#2b2723]">{record.ai_summary}</pre>
-              : <p className="mt-2 text-sm leading-6 text-[#6b6459]">아직 요약이 없습니다. 제출 직후 자동으로 만들어지고, 안 만들어졌으면 「요약 만들기」를 누르세요.</p>}
-            {summaryMessage ? <p className="mt-1 text-xs font-bold text-red-700">{summaryMessage}</p> : null}
+            <textarea id="detail-summary" value={summary} onChange={(event) => setSummary(event.target.value)} className="mt-2 min-h-[150px] w-full resize-y rounded-xl border border-violet-200 bg-white p-3 text-[#2b2723] focus:outline-none" placeholder="제출 직후 AI 가 자동으로 채웁니다. 비어 있으면 「AI로 만들기」를 누르거나 직접 적어주세요." />
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button type="button" disabled={summarySaving || summary === (record.ai_summary || "")} onClick={() => void saveSummary()} className="min-h-12 rounded-xl bg-violet-200 px-5 font-black text-[#2b2723] disabled:opacity-50">{summarySaving ? "저장 중…" : "정리 저장"}</button>
+              {summaryMessage ? <p className="text-sm font-bold text-violet-900">{summaryMessage}</p> : null}
+            </div>
           </section>
-          <section className="mt-6 rounded-[16px] bg-[#2b2723] p-4 text-white"><label htmlFor="detail-admin-memo" className="font-black">관리자 메모</label><textarea id="detail-admin-memo" value={memo} onChange={(event) => setMemo(event.target.value)} className="mt-2 min-h-[150px] w-full resize-y rounded-xl bg-white p-3 text-[#2b2723] focus:outline-none" placeholder="상담 중 기록한 관리자 메모" />{tidyDraft ? (
+          <section className="mt-6 rounded-[16px] bg-[#2b2723] p-4 text-white"><label htmlFor="detail-admin-memo" className="font-black">상담 시작시 관리자 메모</label><textarea id="detail-admin-memo" value={memo} onChange={(event) => setMemo(event.target.value)} className="mt-2 min-h-[150px] w-full resize-y rounded-xl bg-white p-3 text-[#2b2723] focus:outline-none" placeholder="상담 중 기록한 관리자 메모" />{tidyDraft ? (
             <div className="mt-3 rounded-xl border border-violet-300/60 bg-[#3a3430] p-3">
               <p className="text-xs font-black text-violet-200">AI 가 정리한 초안 — 확인하고 마음에 들면 아래 「이대로 바꾸기」를 누른 뒤 「메모 저장」</p>
               <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-white">{tidyDraft}</pre>

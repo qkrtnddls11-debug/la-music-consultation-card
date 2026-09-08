@@ -12,11 +12,12 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const body = (await request.json()) as { status?: ConsultationStatus; admin_memo?: string; assigned_teacher?: string | null };
+    const body = (await request.json()) as { status?: ConsultationStatus; admin_memo?: string; assigned_teacher?: string | null; ai_summary?: string };
     const hasStatus = body.status === "상담" || body.status === "등록";
     const hasMemo = typeof body.admin_memo === "string";
+    const hasSummary = typeof body.ai_summary === "string";
     const hasAssignedTeacher = typeof body.assigned_teacher === "string" || body.assigned_teacher === null;
-    if (!hasStatus && !hasMemo && !hasAssignedTeacher) {
+    if (!hasStatus && !hasMemo && !hasAssignedTeacher && !hasSummary) {
       return Response.json({ error: "상태값이 올바르지 않습니다." }, { status: 400 });
     }
 
@@ -35,9 +36,10 @@ export async function PATCH(
       }
     }
 
-    const updates: { status?: ConsultationStatus; admin_memo?: string; assigned_teacher?: string | null } = {};
+    const updates: { status?: ConsultationStatus; admin_memo?: string; assigned_teacher?: string | null; ai_summary?: string | null } = {};
     if (hasStatus) updates.status = body.status;
     if (hasMemo) updates.admin_memo = body.admin_memo!.trim().slice(0, 4000);
+    if (hasSummary) updates.ai_summary = body.ai_summary!.trim().slice(0, 4000) || null;
     if (hasAssignedTeacher) updates.assigned_teacher = typeof body.assigned_teacher === "string" && body.assigned_teacher.trim() ? body.assigned_teacher.trim().slice(0, 40) : null;
     const { error } = await supabase
       .from("consultations")
