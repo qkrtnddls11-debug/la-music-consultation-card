@@ -268,7 +268,9 @@ function ReservationInfoEditor({ record, busy, onSave, onCancel }: { record: Res
 function ReservationConfirmEditor({ record, busy, options, onSave, onDirtyChange }: { record: ReservationRecord; busy: boolean; options: CrmScheduleOptions | null; onSave: (slots: EditableSlot[]) => void; onDirtyChange?: (dirty: boolean) => void }) {
   const initialSlots = slotsFromRecord(record);
   const [slots, setSlots] = useState<EditableSlot[]>(initialSlots);
-  const disabled = busy || record.status === "상담완료";
+  // 상담이 끝난 뒤(상담완료)에도 체험수업 날짜·강사·연습실은 바꿀 수 있어야 한다.
+  // 토요일에 상담만 받고 체험은 다른 요일로 잡는 학생이 많은데, 예전에는 상담완료가 되면 잠겨서 못 고쳤다.
+  const disabled = busy;
   const unchanged = JSON.stringify(slots) === JSON.stringify(initialSlots);
   const hasAnySchedule = slots.some((slot) => slot.atLocal);
   // 저장하지 않은 배정 변경이 있으면 부모(카드)에게 알려 상담 시작 버튼을 잠근다
@@ -1143,7 +1145,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
 
       {!teacherMode ? <CrmAssistPanel branch={branchFilter} /> : null}
 
-      {selected ? <ConsultationDetail record={selected} reservation={selected.reservation_id ? reservationById.get(selected.reservation_id) : undefined} diagnosis={diagnosisByConsultation.get(selected.id)} consent={consentByConsultation.get(selected.id)} consentRequest={latestRequestByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id || deletingKey === `consultation:${selected.id}`} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onConsent={() => { const consent = consentByConsultation.get(selected.id); if (consent) setConsentViewer({ consentId: consent.id, consultation: selected }); }} onSignatureLink={() => { setSignatureRecord(selected); setSelected(null); }} onRecordUpdate={(record) => { setRecords((current) => current.map((item) => item.id === record.id ? record : item)); setSelected(record); }} onStatus={(status) => void updateStatus(selected, status)} onDelete={() => void deleteRecord("consultation", selected.id, selected.name)} /> : null}
+      {selected ? <ConsultationDetail record={selected} reservation={selected.reservation_id ? reservationById.get(selected.reservation_id) : undefined} diagnosis={diagnosisByConsultation.get(selected.id)} consent={consentByConsultation.get(selected.id)} consentRequest={latestRequestByConsultation.get(selected.id)} diagnosisBusy={diagnosisBusyId === selected.id} busy={updatingId === selected.id || deletingKey === `consultation:${selected.id}`} onClose={() => setSelected(null)} onDiagnosis={() => { const consultation = selected; setSelected(null); void openDiagnosis(consultation); }} onConsent={() => { const consent = consentByConsultation.get(selected.id); if (consent) setConsentViewer({ consentId: consent.id, consultation: selected }); }} onSignatureLink={() => { setSignatureRecord(selected); setSelected(null); }} onRecordUpdate={(record) => { setRecords((current) => current.map((item) => item.id === record.id ? record : item)); setSelected(record); }} onStatus={(status) => void updateStatus(selected, status)} onDelete={() => void deleteRecord("consultation", selected.id, selected.name)} crmOptions={crmOptions} reservationBusy={Boolean(selected.reservation_id) && updatingId === selected.reservation_id} onReservationSlots={(slots) => { const linked = selected.reservation_id ? reservationById.get(selected.reservation_id) : undefined; if (linked) void updateReservationSlots(linked, slots); }} /> : null}
       {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} branchName={branchFilter} /> : null}
       {rulesDocOpen ? <RulesDocumentDialog onClose={() => setRulesDocOpen(false)} branchName={branchFilter} /> : null}
       {diagnosisEditor ? <VocalDiagnosisEditor initialDiagnosis={diagnosisEditor.diagnosis} consultation={diagnosisEditor.consultation} onClose={() => setDiagnosisEditor(null)} onSaved={upsertDiagnosis} /> : null}
@@ -1169,9 +1171,15 @@ function ConsultationDetail({
   onRecordUpdate,
   onStatus,
   onDelete,
+  crmOptions,
+  reservationBusy,
+  onReservationSlots,
 }: {
   record: ConsultationRecord;
   reservation?: ReservationRecord;
+  crmOptions: CrmScheduleOptions | null;
+  reservationBusy: boolean;
+  onReservationSlots: (slots: EditableSlot[]) => void;
   diagnosis?: VocalDiagnosisRecord;
   consent?: ConsentRecord;
   consentRequest?: ConsentRequestRecord;
@@ -1281,6 +1289,36 @@ function ConsultationDetail({
           <dl className="grid grid-cols-[105px_1fr] gap-x-4 gap-y-3 text-[0.95rem] sm:grid-cols-[128px_1fr]">
             {rows.map(([label, value]) => value ? <div key={label} className="contents"><dt className="font-bold text-[#6b6459]">{label}</dt><dd className="whitespace-pre-line break-words leading-relaxed">{value}</dd></div> : null)}
           </dl>
+          {/* 체험수업 배정: 상담 기록에서도 바로 고친다. 상담이 끝난 뒤 체험 날짜가 바뀌는 일이 잦다. */}
+          <section className="mt-6 rounded-[16px] border-[1.5px] border-[#e8a23d]/70 bg-amber-50 p-4">
+            <h3 className="font-black text-[#b76e08]">🎯 체험수업 배정</h3>
+            {reservation ? (
+              <>
+                <div className="mt-2 text-sm leading-7 text-[#4a453d]">
+                  {(() => {
+                    const shown = (reservation.trial_slots?.length
+                      ? reservation.trial_slots.filter((slot) => slot.at)
+                      : reservation.confirmed_at ? [{ subject: reservation.subjects[0] || "체험", at: reservation.confirmed_at, teacher: reservation.trial_teacher || "", room: reservation.trial_room || "" }] : []);
+                    return shown.length > 0
+                      ? shown.map((slot) => <p key={slot.subject} className="font-bold">{[slot.subject, formatTrialDateTime(slot.at), slot.teacher && `${slot.teacher} 강사`, slot.room].filter(Boolean).join(" · ")}</p>)
+                      : <p className="font-bold text-[#8a8378]">아직 배정된 체험수업이 없습니다.</p>;
+                  })()}
+                </div>
+                <p className="mt-1 text-xs font-semibold text-[#9a9389]">상담이 끝난 뒤에도 여기서 날짜·시간·강사·연습실을 바꿀 수 있습니다. 저장하면 CRM 상담관리 카드에도 반영됩니다.</p>
+                <div className="mt-3">
+                  <ReservationConfirmEditor
+                    key={`${reservation.confirmed_at ?? "empty"}-${JSON.stringify(reservation.trial_slots ?? [])}-${reservation.trial_teacher ?? ""}-${reservation.trial_room ?? ""}`}
+                    record={reservation}
+                    busy={reservationBusy}
+                    options={crmOptions}
+                    onSave={onReservationSlots}
+                  />
+                </div>
+              </>
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-[#6b6459]">연결된 예약이 없어 체험수업을 잡을 수 없습니다. 예약 화면에서 이 학생의 예약을 만들면 여기서 배정할 수 있습니다.</p>
+            )}
+          </section>
           <section className="mt-6 rounded-[16px] bg-[#2b2723] p-4 text-white"><label htmlFor="detail-admin-memo" className="font-black">관리자 메모</label><textarea id="detail-admin-memo" value={memo} onChange={(event) => setMemo(event.target.value)} className="mt-2 min-h-[150px] w-full resize-y rounded-xl bg-white p-3 text-[#2b2723] focus:outline-none" placeholder="상담 중 기록한 관리자 메모" /><div className="mt-3 flex items-center gap-3"><button type="button" disabled={memoBusy || memo === (record.admin_memo || "")} onClick={() => void saveMemo()} className="min-h-12 rounded-xl bg-[#e8a23d] px-5 font-black text-[#2b2723] disabled:opacity-50">{memoBusy ? "저장 중…" : "메모 저장"}</button>{memoMessage ? <p className="text-sm font-bold text-[#f4cf91]">{memoMessage}</p> : null}</div></section>
           <button type="button" disabled={busy} onClick={onDelete} className="mt-5 min-h-12 w-full rounded-xl border border-red-200 bg-red-50 px-5 text-sm font-extrabold text-red-700 disabled:opacity-50">{busy ? "처리 중…" : "이 상담 기록 삭제"}</button>
         </div>
