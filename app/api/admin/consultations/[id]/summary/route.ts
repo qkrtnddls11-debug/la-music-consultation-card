@@ -13,7 +13,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (error) return Response.json({ error: "상담 기록을 불러오지 못했습니다." }, { status: 502 });
     if (!record) return Response.json({ error: "상담 기록을 찾지 못했습니다." }, { status: 404 });
 
-    const summary = await requestConsultationSummary(record as ConsultationRecord);
+    const consultation = record as ConsultationRecord;
+    const { data: reservation } = consultation.reservation_id
+      ? await supabase.from("reservations").select("learning_goal,schedule_note").eq("id", consultation.reservation_id).maybeSingle()
+      : { data: null };
+    const summary = await requestConsultationSummary(consultation, reservation);
     if (!summary) return Response.json({ error: "AI 요약을 받지 못했습니다. 잠시 후 다시 눌러주세요." }, { status: 502 });
 
     const { error: saveError } = await supabase.from("consultations").update({ ai_summary: summary }).eq("id", id);

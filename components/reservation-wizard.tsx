@@ -14,10 +14,26 @@ import {
   type ReservationSource,
 } from "@/lib/types";
 
-type Step = "name" | "phone" | "gender" | "birth" | "subjects" | "lesson" | "schedule";
+type Step = "name" | "phone" | "gender" | "birth" | "subjects" | "lesson" | "goal" | "schedule";
 type DetailSubject = "기타" | "피아노" | "트럼펫" | "플루트";
-const STEPS: Step[] = ["name", "phone", "gender", "birth", "subjects", "lesson", "schedule"];
-const LABELS: Record<Step, string> = { name: "성함", phone: "전화번호", gender: "성별", birth: "생년월일", subjects: "희망 과목", lesson: "레슨 구분", schedule: "희망 시간대" };
+const STEPS: Step[] = ["name", "phone", "gender", "birth", "subjects", "lesson", "goal", "schedule"];
+const LABELS: Record<Step, string> = { name: "성함", phone: "전화번호", gender: "성별", birth: "생년월일", subjects: "희망 과목", lesson: "레슨 구분", goal: "배우고 싶은 것", schedule: "희망 시간대" };
+
+// 「배우고 싶은 것」 문구. 메인 과목·목적에 맞는 것만 보여주고, 누르면 그대로 붙는다. 직접 써도 된다.
+const GOAL_COMMON = ["완전 처음이에요", "예전에 배우다 그만뒀어요", "독학하다 막혔어요", "취미로 천천히 하고 싶어요", "스트레스 해소·즐기려고요"];
+const GOAL_IPSI = ["실용음악과 입시 준비", "오디션·공연 준비", "전공으로 진지하게 하고 싶어요"];
+const GOAL_BY_SUBJECT: Array<[RegExp, string[]]> = [
+  [/보컬|노래/, ["좋아하는 노래를 잘 부르고 싶어요", "고음이 안 올라가요", "음정·박자가 불안해요", "목이 금방 쉬어요", "노래방에서 잘 부르고 싶어요"]],
+  [/기타|베이스/, ["좋아하는 곡을 연주하고 싶어요", "코드 반주를 배우고 싶어요", "밴드에서 연주하고 싶어요", "악보를 볼 줄 몰라요"]],
+  [/피아노|건반/, ["좋아하는 곡을 연주하고 싶어요", "반주·작곡에 쓰고 싶어요", "악보를 볼 줄 몰라요", "어릴 때 배우다 그만뒀어요"]],
+  [/드럼/, ["좋아하는 곡을 연주하고 싶어요", "밴드에서 연주하고 싶어요", "박자감을 키우고 싶어요"]],
+  [/미디|작곡|프로듀싱/, ["내 곡을 만들고 싶어요", "DAW(작곡 프로그램)를 배우고 싶어요", "편곡·믹싱을 배우고 싶어요"]],
+  [/트럼펫|플루트|색소폰|관악/, ["좋아하는 곡을 연주하고 싶어요", "소리 내는 것부터 배우고 싶어요", "악보를 볼 줄 몰라요"]]
+];
+function goalOptions(mainSubject: string, lessonType: string) {
+  const bySubject = GOAL_BY_SUBJECT.find(([pattern]) => pattern.test(mainSubject))?.[1] || ["좋아하는 곡을 하고 싶어요", "기초부터 배우고 싶어요"];
+  return Array.from(new Set([...bySubject, ...(lessonType === "입시" ? GOAL_IPSI : []), ...GOAL_COMMON]));
+}
 const EMPTY_DETAILS: Record<DetailSubject, string[]> = { 기타: [], 피아노: [], 트럼펫: [], 플루트: [] };
 
 function formatPhone(value: string) {
@@ -49,11 +65,14 @@ const inputClass = "min-h-14 w-full min-w-0 rounded-xl border-[1.5px] border-[#d
 export function ReservationWizard({ source, branchName, subjectOptions }: { source: ReservationSource; branchName?: string; subjectOptions?: string[] }) {
   const subjects = subjectOptions && subjectOptions.length > 0 ? subjectOptions : [...SUBJECT_OPTIONS];
   const [step, setStep] = useState<Step>("name");
-  const [draft, setDraft] = useState<ReservationInput>({ name: "", phone: "", gender: "", birth_date: "", subjects: [], lesson_type: "", schedule_preferences: EMPTY_RESERVATION_SCHEDULE.map((item) => ({ ...item, days: [...item.days] })), schedule_note: "", source, branch_name: branchName || DEFAULT_BRANCH });
+  const [draft, setDraft] = useState<ReservationInput>({ name: "", phone: "", gender: "", birth_date: "", subjects: [], lesson_type: "", schedule_preferences: EMPTY_RESERVATION_SCHEDULE.map((item) => ({ ...item, days: [...item.days] })), schedule_note: "", learning_goal: "", source, branch_name: branchName || DEFAULT_BRANCH });
   const [details, setDetails] = useState<Record<DetailSubject, string[]>>({ ...EMPTY_DETAILS });
   const [birth, setBirth] = useState(() => ({ ...EMPTY_BIRTH_DATE }));
   const [today] = useState<Date>(() => new Date());
   const [warning, setWarning] = useState("");
+  const [goalChips, setGoalChips] = useState<string[]>([]);
+  const [goalText, setGoalText] = useState("");
+  function composeGoal() { return [goalChips.join(", "), goalText.trim()].filter(Boolean).join("\n"); }
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -75,6 +94,7 @@ export function ReservationWizard({ source, branchName, subjectOptions }: { sour
     if (current === "birth" && !chosenBirth) return "올바른 생년월일을 입력해 주세요";
     if (current === "subjects" && draft.subjects.length === 0) return "메인 과목을 선택해 주세요";
     if (current === "lesson" && !draft.lesson_type) return "입시 또는 취미를 선택해 주세요";
+    if (current === "goal" && goalChips.length === 0 && goalText.trim().length < 2) return "하나만 골라 주셔도 괜찮아요. 배우고 싶은 것을 알려주세요";
     if (current === "schedule" && (!draft.schedule_preferences[0]?.days.length || !draft.schedule_preferences[0]?.timeSlot)) return "1순위 요일과 시간대를 선택해 주세요";
     if (current === "schedule" && draft.schedule_preferences.some((item) => (item.days.length || item.timeSlot) && (!item.days.length || !item.timeSlot))) return "선택한 순위는 요일과 시간대를 모두 골라 주세요";
     return "";
@@ -102,7 +122,7 @@ export function ReservationWizard({ source, branchName, subjectOptions }: { sour
     const message = validate("schedule"); if (message) return setWarning(message);
     setSubmitting(true); setSubmitError("");
     try {
-      const response = await fetch("/api/reservations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, birth_date: chosenBirth, subjects: detailSubjects() }) });
+      const response = await fetch("/api/reservations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, birth_date: chosenBirth, subjects: detailSubjects(), learning_goal: composeGoal() }) });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || "예약 정보를 저장하지 못했습니다.");
       setSubmitted(true);
@@ -137,6 +157,13 @@ export function ReservationWizard({ source, branchName, subjectOptions }: { sour
     if (step === "birth") return <>{heading("생년월일을 알려주세요", age === null ? "연도는 숫자로 입력하고 월·일은 목록에서 골라주세요" : <><strong className="text-[#4a453d]">만 {age}세</strong>로 계산되었어요</>)}<BirthDateFields value={birth} onChange={setBirth} inputClassName={inputClass} autoFocus /></>;
     if (step === "subjects") return <>{heading("메인 과목을 하나 선택해 주세요", "체험수업은 메인 과목으로 진행돼요")}<div className="flex flex-wrap gap-2.5">{subjects.map((subject) => <Chip key={subject} selected={draft.subjects[0] === subject} onClick={() => selectMainSubject(subject)}>{subject}</Chip>)}</div>{draft.subjects.length > 0 ? <div className="mt-4 rounded-[14px] bg-[#f7f4ee] p-4"><p className="mb-1 font-bold">서브 과목 <span className="font-semibold text-[#9a9389]">(선택사항 · 여러 개 가능)</span></p><p className="mb-2.5 text-sm text-[#9a9389]">관심 있는 과목이 더 있으면 골라 주세요. 상담 때 함께 안내해 드려요.</p><div className="flex flex-wrap gap-2">{subjects.filter((subject) => subject !== draft.subjects[0]).map((subject) => <Chip compact key={subject} selected={draft.subjects.slice(1).includes(subject)} onClick={() => toggleSubSubject(subject)}>{subject}</Chip>)}</div></div> : null}</>;
     if (step === "lesson") return <>{heading("상담 목적을 선택해 주세요", "하나만 선택해 주세요")}<div className="flex flex-wrap gap-2.5">{["입시", "취미"].map((value) => <Chip key={value} selected={draft.lesson_type === value} onClick={() => { patch("lesson_type", value as "입시" | "취미"); scheduleNext(); }}>{value}</Chip>)}</div></>;
+    if (step === "goal") {
+      const options = goalOptions(draft.subjects[0] || "", draft.lesson_type);
+      return <>{heading("무엇을 배우고 싶으세요?", "간단해도 괜찮아요. 맞는 것을 누르거나 한 줄만 적어 주시면 상담이 훨씬 알차져요")}
+        <div className="flex flex-wrap gap-2.5">{options.map((option) => <Chip key={option} selected={goalChips.includes(option)} onClick={() => setGoalChips((current) => current.includes(option) ? current.filter((item) => item !== option) : [...current, option])}>{option}</Chip>)}</div>
+        <textarea aria-label="배우고 싶은 것 직접 쓰기" value={goalText} onChange={(event) => setGoalText(event.target.value.slice(0, 500))} rows={3} placeholder="직접 쓰기 — 예: 아이유 노래를 부르고 싶은데 고음이 힘들어요 / 밴드에서 기타 치고 싶어요" className={`mt-4 ${inputClass} min-h-0 resize-none py-3 leading-6`} />
+      </>;
+    }
     return <>{heading("체험수업 가능한 시간대를 알려주세요", "순위별로 요일과 시간대를 눌러 주세요. 1순위만 작성해도 괜찮아요")}<div className="space-y-5">{draft.schedule_preferences.map((item) => <div key={item.rank} className="rounded-[16px] bg-[#f7f4ee] p-4"><p className="mb-3 font-black text-[#b76e08]">{item.rank}순위</p><div className="flex flex-wrap gap-2">{DAYS.map((day) => <Chip compact key={day} selected={item.days.includes(day)} onClick={() => updateSchedule(item.rank, { days: toggle(item.days, day) })}>{day}</Chip>)}</div><div className="mt-3 flex flex-wrap gap-2">{TIME_SLOTS.map((timeSlot) => <Chip compact key={timeSlot} selected={item.timeSlot === timeSlot} onClick={() => updateSchedule(item.rank, { timeSlot })}>{timeSlot}</Chip>)}</div></div>)}</div><label htmlFor="reservation-schedule-note" className="mt-6 block text-sm font-black text-[#4a453d]">스케줄 참고사항 <span className="font-semibold text-[#9a9389]">(선택)</span></label><textarea id="reservation-schedule-note" aria-label="스케줄 참고사항" className={`${inputClass} mt-2 min-h-[110px] resize-none leading-relaxed`} value={draft.schedule_note} onChange={(event) => patch("schedule_note", event.target.value)} placeholder="예: 평일은 6시 이후 가능, 토요일은 시간 조정 가능" maxLength={500} /></>;
   }
 }

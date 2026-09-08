@@ -44,6 +44,7 @@ export function normalizeReservation(value: unknown): { data?: ReservationInput;
   const lessonType = clean(source.lesson_type, 4);
   const schedule = cleanSchedule(source.schedule_preferences);
   const scheduleNote = clean(source.schedule_note, 500);
+  const learningGoal = clean(source.learning_goal, 1000);
   const phoneDigits = phone.replace(/\D/g, "");
 
   if (!name) return { error: "성함을 입력해 주세요." };
@@ -74,6 +75,7 @@ export function normalizeReservation(value: unknown): { data?: ReservationInput;
       lesson_type: lessonType,
       schedule_preferences: schedule,
       schedule_note: scheduleNote,
+      learning_goal: learningGoal,
       source: reservationSource,
       branch_name: clean(source.branch_name, 60) || DEFAULT_BRANCH,
     },
@@ -111,6 +113,7 @@ export function normalizeReservationPatch(value: unknown): { data?: Partial<Rese
     if (subjects.length === 0) return { error: "희망 과목을 하나 이상 선택해 주세요." };
     data.subjects = subjects;
   }
+  if ("learning_goal" in source) data.learning_goal = clean(source.learning_goal, 1000);
   if ("lesson_type" in source) {
     const lessonType = clean(source.lesson_type, 10);
     if (lessonType !== "입시" && lessonType !== "취미" && lessonType !== "") return { error: "수업 유형은 입시 또는 취미입니다." };

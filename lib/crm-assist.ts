@@ -35,7 +35,9 @@ export async function callCrmAssist<T = Record<string, unknown>>(payload: Record
 }
 
 // 상담 카드를 AI 에게 보낼 글로 바꾼다. 연락처는 보내지 않는다.
-export function consultationCardText(data: ConsultationInput): string {
+export type ReservationExtras = { learning_goal?: string | null; schedule_note?: string | null };
+
+export function consultationCardText(data: ConsultationInput, reservation?: ReservationExtras | null): string {
   const lesson = data.lesson_experience || { hasExperience: null, subjects: "", period: "" };
   const schedule = (data.schedule_preferences || [])
     .map((item) => {
@@ -47,6 +49,9 @@ export function consultationCardText(data: ConsultationInput): string {
     .join(" / ");
   const rows: Array<[string, string]> = [
     ["이름", data.name],
+    // 예약 링크에서 학생이 직접 적은 니즈. 상담 카드보다 먼저, 가장 중요한 재료다.
+    ["배우고 싶은 것(예약 때 학생이 적음)", (reservation?.learning_goal || "").trim()],
+    ["예약 참고사항", (reservation?.schedule_note || "").trim()],
     ["상담 종류", data.card_type],
     ["접수 방법", data.submission_source === "link" ? "링크(집에서 직접 작성)" : "현장 태블릿"],
     ["성별", data.gender],
@@ -73,11 +78,11 @@ export function consultationCardText(data: ConsultationInput): string {
 }
 
 // 제출된 카드의 요약을 받는다. 실패하면 null (제출 자체는 막지 않는다).
-export async function requestConsultationSummary(data: ConsultationInput): Promise<string | null> {
+export async function requestConsultationSummary(data: ConsultationInput, reservation?: ReservationExtras | null): Promise<string | null> {
   const result = await callCrmAssist<{ ok?: boolean; text?: string; reason?: string }>({
     branch: data.branch_name,
     task: "summarize_card",
-    card: consultationCardText(data)
+    card: consultationCardText(data, reservation)
   });
   if (!result?.ok || !result.text) {
     if (result?.reason) console.error("consultation summary refused", result.reason);

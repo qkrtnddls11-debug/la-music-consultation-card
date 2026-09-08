@@ -1,16 +1,16 @@
 import { after } from "next/server";
 import { hasAdminSession } from "@/lib/admin-auth";
 import { normalizeConsultation } from "@/lib/consultation-validation";
-import { requestConsultationSummary } from "@/lib/crm-assist";
+import { requestConsultationSummary, type ReservationExtras } from "@/lib/crm-assist";
 import { validReservationId } from "@/lib/reservation-validation";
 import { createAdminSupabase, createAnonymousSupabase } from "@/lib/supabase-server";
 import type { ConsultationInput } from "@/lib/types";
 
 // 제출이 끝난 뒤(응답을 보낸 뒤) AI 요약을 만들어 붙인다. 학생은 기다리지 않고, 요약이 실패해도 제출은 그대로다.
-function scheduleSummary(id: string, data: ConsultationInput) {
+function scheduleSummary(id: string, data: ConsultationInput, reservation?: ReservationExtras | null) {
   after(async () => {
     try {
-      const summary = await requestConsultationSummary(data);
+      const summary = await requestConsultationSummary(data, reservation);
       if (!summary) return;
       const { error } = await createAdminSupabase().from("consultations").update({ ai_summary: summary }).eq("id", id);
       if (error) console.error("consultation summary save failed", { code: error.code, message: error.message });
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         return Response.json({ error: "예약 연결 권한이 없거나 예약 번호가 올바르지 않습니다." }, { status: 401 });
       }
       const supabase = createAdminSupabase();
-      const { data: reservation, error: reservationError } = await supabase.from("reservations").select("id,status,branch_name").eq("id", reservationId).maybeSingle();
+      const { data: reservation, error: reservationError } = await supabase.from("reservations").select("id,status,branch_name,learning_goal,schedule_note").eq("id", reservationId).maybeSingle();
       if (reservationError || !reservation) return Response.json({ error: "연결된 예약을 찾지 못했습니다." }, { status: 404 });
 
       // 지점은 예약의 지점을 그대로 따라간다
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         await supabase.from("consultations").delete().eq("id", consultation.id);
         return Response.json({ error: "예약과 상담을 연결하지 못했습니다." }, { status: 502 });
       }
-      scheduleSummary(consultation.id, linkedPayload);
+      scheduleSummary(consultation.id, linkedPayload, reservation as ReservationExtras);
       return Response.json({ ok: true, id: consultation.id }, { status: 201, headers: { "Cache-Control": "no-store" } });
     }
 

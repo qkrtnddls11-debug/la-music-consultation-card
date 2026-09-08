@@ -75,6 +75,8 @@ export type ReservationInput = {
   lesson_type: "입시" | "취미" | "";
   schedule_preferences: ReservationSchedulePreference[];
   schedule_note: string;
+  // 예약 때 학생이 적은 "배우고 싶은 것" (고른 문구 + 직접 쓴 글). 상담 전 니즈 파악용.
+  learning_goal?: string;
   source: ReservationSource;
   branch_name: string;
 };

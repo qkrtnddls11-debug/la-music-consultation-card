@@ -226,14 +226,14 @@ function TrialSlotEditor({ slot, options, disabled, idPrefix, ownName, onChange 
   </div>;
 }
 
-type ReservationInfoFields = { name: string; phone: string; gender: string; birth_date: string; lesson_type: "입시" | "취미" | ""; subjects: string[]; schedule_note: string };
+type ReservationInfoFields = { name: string; phone: string; gender: string; birth_date: string; lesson_type: "입시" | "취미" | ""; subjects: string[]; schedule_note: string; learning_goal: string };
 
 // 예약의 인적정보(이름·전화·과목 등)를 카드에서 바로 고친다.
 // 링크로 접수된 예약은 부모가 직접 적어 오타가 잦은데, 지금까지는 지우고 다시 받는 수밖에 없었다.
 function ReservationInfoEditor({ record, busy, onSave, onCancel }: { record: ReservationRecord; busy: boolean; onSave: (fields: ReservationInfoFields) => void; onCancel: () => void }) {
   const [fields, setFields] = useState<ReservationInfoFields>({
     name: record.name, phone: record.phone, gender: record.gender || "", birth_date: record.birth_date || "",
-    lesson_type: record.lesson_type || "", subjects: [...record.subjects], schedule_note: record.schedule_note || ""
+    lesson_type: record.lesson_type || "", subjects: [...record.subjects], schedule_note: record.schedule_note || "", learning_goal: record.learning_goal || ""
   });
   const subjectOptions = Array.from(new Set([...SUBJECT_OPTIONS, ...record.subjects]));
   const set = <K extends keyof ReservationInfoFields>(key: K, value: ReservationInfoFields[K]) => setFields((current) => ({ ...current, [key]: value }));
@@ -256,6 +256,7 @@ function ReservationInfoEditor({ record, busy, onSave, onCancel }: { record: Res
         <button key={subject} type="button" disabled={busy} onClick={() => toggleSubject(subject)} className={`min-h-10 rounded-lg px-3 text-sm font-bold ${fields.subjects.includes(subject) ? "bg-[#2b2723] text-white" : "border border-[#e4ded4] bg-[#faf9f6] text-[#6b6459]"}`}>{subject}</button>
       ))}
     </div>
+    <label className="mt-3 block text-xs font-bold text-[#6b6459]">배우고 싶은 것<textarea value={fields.learning_goal} onChange={(event) => set("learning_goal", event.target.value)} disabled={busy} rows={2} className={`mt-1 ${inputClass} min-h-0 py-2`} /></label>
     <label className="mt-3 block text-xs font-bold text-[#6b6459]">참고 메모<textarea value={fields.schedule_note} onChange={(event) => set("schedule_note", event.target.value)} disabled={busy} rows={2} className={`mt-1 ${inputClass} min-h-0 py-2`} /></label>
     {invalid ? <p className="mt-2 text-xs font-bold text-red-700">{invalid}</p> : null}
     <div className="mt-3 flex flex-wrap gap-2">
@@ -1082,6 +1083,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                     <p className="mt-2 text-sm font-semibold text-[#4a453d]">{[reservation.phone, reservation.gender, reservation.birth_date].filter(Boolean).join(" · ")}</p>
                     <p className="mt-1 text-sm text-[#6b6459]">{[reservation.lesson_type, subjectsLabel(reservation.subjects)].filter(Boolean).join(" · ")}</p>
                     <div className="mt-3 rounded-xl bg-white/80 p-3 text-sm leading-6 text-[#5f584e]">{reservation.schedule_preferences.map((item) => item.days?.length || item.day || item.timeSlot || item.timeText ? <p key={item.rank}><strong>{item.rank}순위</strong> · {reservationScheduleLabel(item)}</p> : null)}{reservation.schedule_note ? <p className="mt-2 border-t border-[#ded8cf] pt-2"><strong>참고</strong> · {reservation.schedule_note}</p> : null}</div>
+                    {reservation.learning_goal ? <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 p-3 text-sm leading-6 text-[#4a453d]"><p className="text-xs font-black text-violet-900">🎯 배우고 싶은 것</p><p className="mt-0.5 whitespace-pre-wrap font-semibold">{reservation.learning_goal}</p></div> : null}
                     {(reservation.trial_slots?.length || reservation.confirmed_at) ? (
                       <div className="mt-3 rounded-xl border-[1.5px] border-[#e8a23d]/70 bg-amber-50 p-3 text-sm leading-7">
                         <p className="font-black text-[#b76e08]">🎯 체험수업 배정</p>
@@ -1328,7 +1330,7 @@ function ConsultationDetail({
           <button type="button" onClick={onClose} aria-label="상세 보기 닫기" className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#eee9e0] text-xl font-bold">×</button>
         </header>
         <div className="p-5 sm:p-6">
-          <section className="mb-5 rounded-[16px] border border-[#ded8cf] bg-[#f7f4ee] p-4"><h3 className="font-black">학생 흐름 연결</h3><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs font-extrabold"><div className={`rounded-xl p-3 ${reservation ? "bg-sky-100 text-sky-900" : "bg-white text-[#8a8378]"}`}>예약<br />{reservation ? reservation.status : "없음(바로 방문)"}</div><div className={`rounded-xl p-3 ${diagnosis ? "bg-violet-100 text-violet-900" : "bg-white text-[#8a8378]"}`}>보컬 진단서<br />{record.subjects.includes("보컬") ? diagnosis ? "작성됨" : "미작성" : "해당 없음"}</div><div className={`rounded-xl p-3 ${consent ? "bg-emerald-100 text-emerald-900" : consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "bg-amber-100 text-amber-900" : "bg-white text-[#8a8378]"}`}>등록 동의서<br />{consent ? "완료" : consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "서명 대기 중" : "미요청"}</div></div>{reservation ? <div className="mt-3 text-sm leading-6 text-[#5f584e]"><p><strong>예약 접수:</strong> {formatCreatedAt(reservation.created_at)} · {reservation.lesson_type} · {reservation.source === "link" ? "링크" : "현장"}</p><p><strong>확정 일시:</strong> {reservation.confirmed_at ? formatCreatedAt(reservation.confirmed_at) : "미정"}</p><p><strong>예약 희망 시간:</strong> {reservation.schedule_preferences.filter((item) => item.days?.length || item.day || item.timeSlot || item.timeText).map((item) => `${item.rank}순위 ${reservationScheduleLabel(item)}`).join(" / ")}</p>{reservation.schedule_note ? <p><strong>예약 참고사항:</strong> {reservation.schedule_note}</p> : null}</div> : null}</section>
+          <section className="mb-5 rounded-[16px] border border-[#ded8cf] bg-[#f7f4ee] p-4"><h3 className="font-black">학생 흐름 연결</h3><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs font-extrabold"><div className={`rounded-xl p-3 ${reservation ? "bg-sky-100 text-sky-900" : "bg-white text-[#8a8378]"}`}>예약<br />{reservation ? reservation.status : "없음(바로 방문)"}</div><div className={`rounded-xl p-3 ${diagnosis ? "bg-violet-100 text-violet-900" : "bg-white text-[#8a8378]"}`}>보컬 진단서<br />{record.subjects.includes("보컬") ? diagnosis ? "작성됨" : "미작성" : "해당 없음"}</div><div className={`rounded-xl p-3 ${consent ? "bg-emerald-100 text-emerald-900" : consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "bg-amber-100 text-amber-900" : "bg-white text-[#8a8378]"}`}>등록 동의서<br />{consent ? "완료" : consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "서명 대기 중" : "미요청"}</div></div>{reservation ? <div className="mt-3 text-sm leading-6 text-[#5f584e]"><p><strong>예약 접수:</strong> {formatCreatedAt(reservation.created_at)} · {reservation.lesson_type} · {reservation.source === "link" ? "링크" : "현장"}</p><p><strong>확정 일시:</strong> {reservation.confirmed_at ? formatCreatedAt(reservation.confirmed_at) : "미정"}</p><p><strong>예약 희망 시간:</strong> {reservation.schedule_preferences.filter((item) => item.days?.length || item.day || item.timeSlot || item.timeText).map((item) => `${item.rank}순위 ${reservationScheduleLabel(item)}`).join(" / ")}</p>{reservation.learning_goal ? <p className="whitespace-pre-wrap"><strong>배우고 싶은 것(예약 때):</strong> {reservation.learning_goal}</p> : null}{reservation.schedule_note ? <p><strong>예약 참고사항:</strong> {reservation.schedule_note}</p> : null}</div> : null}</section>
           {/* 체험수업 배정: 상담 기록에서도 바로 고친다. 상담이 끝난 뒤 체험 날짜가 바뀌는 일이 잦다. */}
           <section className="mb-5 rounded-[16px] border-[1.5px] border-[#e8a23d]/70 bg-amber-50 p-4">
             <h3 className="font-black text-[#b76e08]">🎯 체험수업 배정</h3>
