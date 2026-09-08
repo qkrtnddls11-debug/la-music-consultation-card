@@ -1044,6 +1044,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${consentByConsultation.has(record.id) ? "bg-emerald-100 text-emerald-800" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "bg-violet-100 text-violet-800" : "bg-[#eee9e0] text-[#6b6459]"}`}>{consentByConsultation.has(record.id) ? "서명 완료" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "서명 대기 중" : "서명 미요청"}</span>
                   </div>
                   <p className="mt-1.5 text-sm text-[#6b6459]">{record.student_phone || record.parent_phone || "연락처 없음"} · {subjectsLabel(record.subjects) || "과목 미입력"}</p>
+                  {record.ai_summary ? <p className="mt-1 text-sm font-bold text-violet-900">✨ {record.ai_summary.split("\n")[0].replace(/^[-•·\s]*/, "")}</p> : null}
                   <p className="mt-1 text-xs text-[#9a9389]">{formatCreatedAt(record.created_at)}</p>
                 </button>
                 <div className="flex flex-wrap gap-2">
@@ -1198,6 +1199,8 @@ function ConsultationDetail({
   const [memoMessage, setMemoMessage] = useState("");
   const [tidyBusy, setTidyBusy] = useState(false);
   const [tidyDraft, setTidyDraft] = useState("");
+  const [summaryBusy, setSummaryBusy] = useState(false);
+  const [summaryMessage, setSummaryMessage] = useState("");
   const [renderedAt] = useState(() => Date.now());
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -1242,6 +1245,19 @@ function ConsultationDetail({
       setTidyDraft(result.text);
     } catch (error) { setMemoMessage(error instanceof Error ? error.message : "AI 정리를 받지 못했습니다."); }
     finally { setTidyBusy(false); }
+  }
+
+  // AI 한눈에 보기: 제출 때 자동으로 붙지만, 안 붙었거나 다시 만들고 싶으면 여기서 만든다.
+  async function regenerateSummary() {
+    if (summaryBusy) return;
+    setSummaryBusy(true); setSummaryMessage("");
+    try {
+      const response = await fetch(`/api/admin/consultations/${record.id}/summary`, { method: "POST" });
+      const result = await response.json() as { ok?: boolean; ai_summary?: string; error?: string };
+      if (!response.ok || !result.ai_summary) throw new Error(result.error || "AI 요약을 받지 못했습니다.");
+      onRecordUpdate({ ...record, ai_summary: result.ai_summary });
+    } catch (error) { setSummaryMessage(error instanceof Error ? error.message : "AI 요약을 받지 못했습니다."); }
+    finally { setSummaryBusy(false); }
   }
 
   const lesson = safeLesson(record.lesson_experience);
@@ -1296,6 +1312,20 @@ function ConsultationDetail({
           <button type="button" onClick={onClose} aria-label="상세 보기 닫기" className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#eee9e0] text-xl font-bold">×</button>
         </header>
         <div className="p-5 sm:p-6">
+          {/* AI 한눈에 보기: 학생이 적어 낸 것들을 관리자가 10초 안에 파악하도록 요약 */}
+          <section className="mb-5 rounded-[16px] border-[1.5px] border-violet-300 bg-violet-50 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-violet-200 px-1.5 py-0.5 text-[10px] font-black text-[#2b2723]">AI</span>
+              <h3 className="font-black text-violet-900">한눈에 보기</h3>
+              <button type="button" disabled={summaryBusy} onClick={() => void regenerateSummary()} className="ml-auto min-h-10 rounded-lg border border-violet-300 bg-white px-3 text-xs font-black text-violet-900 disabled:opacity-50">
+                {summaryBusy ? "만드는 중…" : record.ai_summary ? "다시 만들기" : "요약 만들기"}
+              </button>
+            </div>
+            {record.ai_summary
+              ? <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-[#2b2723]">{record.ai_summary}</pre>
+              : <p className="mt-2 text-sm leading-6 text-[#6b6459]">아직 요약이 없습니다. 제출 직후 자동으로 만들어지고, 안 만들어졌으면 「요약 만들기」를 누르세요.</p>}
+            {summaryMessage ? <p className="mt-1 text-xs font-bold text-red-700">{summaryMessage}</p> : null}
+          </section>
           <section className="mb-5 rounded-[16px] border border-[#ded8cf] bg-[#f7f4ee] p-4"><h3 className="font-black">학생 흐름 연결</h3><div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs font-extrabold"><div className={`rounded-xl p-3 ${reservation ? "bg-sky-100 text-sky-900" : "bg-white text-[#8a8378]"}`}>예약<br />{reservation ? reservation.status : "없음(바로 방문)"}</div><div className={`rounded-xl p-3 ${diagnosis ? "bg-violet-100 text-violet-900" : "bg-white text-[#8a8378]"}`}>보컬 진단서<br />{record.subjects.includes("보컬") ? diagnosis ? "작성됨" : "미작성" : "해당 없음"}</div><div className={`rounded-xl p-3 ${consent ? "bg-emerald-100 text-emerald-900" : consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "bg-amber-100 text-amber-900" : "bg-white text-[#8a8378]"}`}>등록 동의서<br />{consent ? "완료" : consentRequest && !consentRequest.revoked_at && new Date(consentRequest.expires_at).getTime() > renderedAt ? "서명 대기 중" : "미요청"}</div></div>{reservation ? <div className="mt-3 text-sm leading-6 text-[#5f584e]"><p><strong>예약 접수:</strong> {formatCreatedAt(reservation.created_at)} · {reservation.lesson_type} · {reservation.source === "link" ? "링크" : "현장"}</p><p><strong>확정 일시:</strong> {reservation.confirmed_at ? formatCreatedAt(reservation.confirmed_at) : "미정"}</p><p><strong>예약 희망 시간:</strong> {reservation.schedule_preferences.filter((item) => item.days?.length || item.day || item.timeSlot || item.timeText).map((item) => `${item.rank}순위 ${reservationScheduleLabel(item)}`).join(" / ")}</p>{reservation.schedule_note ? <p><strong>예약 참고사항:</strong> {reservation.schedule_note}</p> : null}</div> : null}</section>
           {record.subjects.includes("보컬") ? (
             <button type="button" disabled={diagnosisBusy} onClick={onDiagnosis} className="mb-4 min-h-14 w-full rounded-[14px] bg-violet-100 px-5 text-base font-extrabold text-violet-900 disabled:opacity-50">

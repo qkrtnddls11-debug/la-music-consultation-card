@@ -155,6 +155,8 @@ export type ConsultationRecord = ConsultationInput & {
   created_at: string;
   status: ConsultationStatus;
   assigned_teacher?: string | null;
+  // 제출 직후 AI 가 만든 요약 (없으면 관리자가 「요약 만들기」)
+  ai_summary?: string | null;
 };
 
 export type VocalDiagnosisInput = {
