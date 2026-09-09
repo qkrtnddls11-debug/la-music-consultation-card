@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 // 체험수업 배정 도우미. 넓은 화면에서는 오른쪽 빈 공간에 붙고, 좁은 화면에서는 아래 버튼으로 접힌다.
 // 강사·빈 강의실 계산은 CRM이 하고 여기서는 받아서 보여주기만 한다.
 type AssistRange = { from: string; to: string; rooms: string[] };
-type AssistHit = { name: string; subject: string; ranges: AssistRange[] };
+type AssistExpected = { student: string; from: string; to: string };
+type AssistHit = { name: string; subject: string; ranges: AssistRange[]; expected?: AssistExpected[] };
 type AssistAnswer = {
   ok?: boolean;
   reason?: string;
@@ -145,6 +146,11 @@ export function CrmAssistPanel({ branch }: { branch: string }) {
                               : <span className="text-red-700">이 시간 내내 비는 방 없음</span>}
                           </p>
                         ))}
+                        {(hit.expected || []).length > 0 ? (
+                          <p className="mt-1 text-xs font-bold text-amber-700">
+                            예정: {(hit.expected || []).map((item) => `${item.student} ${item.from}~${item.to}`).join(", ")} — 재등록 전 예상 수업이라 확정은 아닙니다
+                          </p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
