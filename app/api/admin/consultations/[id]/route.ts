@@ -12,7 +12,9 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const body = (await request.json()) as { status?: ConsultationStatus; admin_memo?: string; assigned_teacher?: string | null; ai_summary?: string };
+    // skipConsent: 상담 뒤 나중에 등록을 결정한 학생처럼 지금 서명을 받을 수 없을 때, 등록만 먼저 하고 서명은 뒤에 받는다.
+    // CRM 은 서명이 없는 등록 학생에게 "동의서 서명 필요" 표시를 붙여 준다.
+    const body = (await request.json()) as { status?: ConsultationStatus; admin_memo?: string; assigned_teacher?: string | null; ai_summary?: string; skipConsent?: boolean };
     const hasStatus = body.status === "상담" || body.status === "등록";
     const hasMemo = typeof body.admin_memo === "string";
     const hasSummary = typeof body.ai_summary === "string";
@@ -22,7 +24,7 @@ export async function PATCH(
     }
 
     const supabase = createAdminSupabase();
-    if (hasStatus && body.status === "등록") {
+    if (hasStatus && body.status === "등록" && body.skipConsent !== true) {
       const { data: consent, error: consentError } = await supabase
         .from("consents")
         .select("id")

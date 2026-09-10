@@ -345,6 +345,8 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
   const [diagnosisEditor, setDiagnosisEditor] = useState<DiagnosisEditorState | null>(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [registrationRecord, setRegistrationRecord] = useState<ConsultationRecord | null>(null);
+  // 서명 없이 등록할지 묻는 창 (상담 뒤 나중에 등록을 결정해 지금 서명을 받을 수 없는 경우)
+  const [registrationChoice, setRegistrationChoice] = useState<ConsultationRecord | null>(null);
   const [consentViewer, setConsentViewer] = useState<{ consentId: string; consultation: ConsultationRecord } | null>(null);
   const [signatureRecord, setSignatureRecord] = useState<ConsultationRecord | null>(null);
 
@@ -836,10 +838,12 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
     }
   }
 
-  async function updateStatus(record: ConsultationRecord, status: ConsultationStatus) {
-    if (status === "등록" && !consentByConsultation.has(record.id)) {
+  async function updateStatus(record: ConsultationRecord, status: ConsultationStatus, options: { skipConsent?: boolean } = {}) {
+    if (status === "등록" && !consentByConsultation.has(record.id) && !options.skipConsent) {
       setSelected(null);
-      setRegistrationRecord(record);
+      // 이미 등록 상태(서명만 남음)면 바로 동의서 화면, 아니면 "지금 서명 / 나중에 서명" 선택
+      if (record.status === "등록") setRegistrationRecord(record);
+      else setRegistrationChoice(record);
       return;
     }
     if (record.status === status || updatingId) return;
@@ -849,7 +853,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
       const response = await fetch(`/api/admin/consultations/${record.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(options.skipConsent ? { skipConsent: true } : {}) }),
       });
       const result = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(result.error || "상태를 바꾸지 못했습니다.");
@@ -1042,7 +1046,7 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.submission_source === "link" ? "bg-violet-100 text-violet-800" : "bg-sky-100 text-sky-800"}`}>{record.submission_source === "link" ? "링크 접수" : "현장"}</span>
                     <span className="rounded-full bg-[#f3efe7] px-2.5 py-1 text-xs font-semibold text-[#9a9389]">{record.branch_name || DEFAULT_BRANCH}</span>
                     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${record.status === "등록" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{record.status === "등록" ? "등록함" : "상담만 함"}</span>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${consentByConsultation.has(record.id) ? "bg-emerald-100 text-emerald-800" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "bg-violet-100 text-violet-800" : "bg-[#eee9e0] text-[#6b6459]"}`}>{consentByConsultation.has(record.id) ? "서명 완료" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "서명 대기 중" : "서명 미요청"}</span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${consentByConsultation.has(record.id) ? "bg-emerald-100 text-emerald-800" : record.status === "등록" ? "bg-red-100 text-red-800" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "bg-violet-100 text-violet-800" : "bg-[#eee9e0] text-[#6b6459]"}`}>{consentByConsultation.has(record.id) ? "서명 완료" : record.status === "등록" ? "서명 필요" : latestRequestByConsultation.get(record.id) && !latestRequestByConsultation.get(record.id)?.revoked_at && new Date(latestRequestByConsultation.get(record.id)!.expires_at).getTime() > renderedAt ? "서명 대기 중" : "서명 미요청"}</span>
                   </div>
                   <p className="mt-1.5 text-sm text-[#6b6459]">{record.student_phone || record.parent_phone || "연락처 없음"} · {subjectsLabel(record.subjects) || "과목 미입력"}</p>
                   {record.ai_summary ? <p className="mt-1 text-sm font-bold text-violet-900">✨ {record.ai_summary.split("\n")[0].replace(/^[-•·\s]*/, "")}</p> : null}
@@ -1152,6 +1156,19 @@ export function AdminDashboard({ initialView = "consultations", lockedBranch, lo
       {linkDialogOpen ? <ConsultationLinkDialog onClose={() => setLinkDialogOpen(false)} branchName={branchFilter} /> : null}
       {rulesDocOpen ? <RulesDocumentDialog onClose={() => setRulesDocOpen(false)} branchName={branchFilter} /> : null}
       {diagnosisEditor ? <VocalDiagnosisEditor initialDiagnosis={diagnosisEditor.diagnosis} consultation={diagnosisEditor.consultation} onClose={() => setDiagnosisEditor(null)} onSaved={upsertDiagnosis} /> : null}
+      {registrationChoice ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-[20px] bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-black">{registrationChoice.name} 학생 등록</h2>
+            <p className="mt-2 text-sm leading-relaxed text-[#6b6459]">등록 동의서와 전자서명을 지금 받을 수 있나요? 학생·학부모가 지금 없으면 등록만 먼저 하고 서명은 나중에 받을 수 있습니다. 서명 전까지 CRM 학생 카드에 「동의서 서명 필요」 표시가 붙습니다.</p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button type="button" onClick={() => { const record = registrationChoice; setRegistrationChoice(null); setRegistrationRecord(record); }} className="min-h-14 w-full rounded-[14px] bg-[#2b2723] px-5 text-base font-extrabold text-white">지금 동의서·서명 받기</button>
+              <button type="button" onClick={() => { const record = registrationChoice; setRegistrationChoice(null); void updateStatus(record, "등록", { skipConsent: true }); }} className="min-h-14 w-full rounded-[14px] bg-[#e8a23d] px-5 text-base font-extrabold text-[#2b2723]">등록만 먼저 하고 서명은 나중에</button>
+              <button type="button" onClick={() => setRegistrationChoice(null)} className="min-h-12 w-full rounded-[14px] bg-[#f3efe7] px-5 text-sm font-bold text-[#6b6459]">취소</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {registrationRecord ? <RegistrationConsentFlow consultation={registrationRecord} branchName={branchFilter} onClose={() => setRegistrationRecord(null)} onComplete={completeRegistration} /> : null}
       {consentViewer ? <ConsentDetailModal consentId={consentViewer.consentId} consultation={consentViewer.consultation} onClose={() => setConsentViewer(null)} /> : null}
       {signatureRecord ? <SignatureLinkDialog consultation={signatureRecord} onClose={() => setSignatureRecord(null)} onCreated={storeConsentRequest} /> : null}
