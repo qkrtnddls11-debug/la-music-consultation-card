@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 type AssistRange = { from: string; to: string; rooms: string[] };
 type AssistExpected = { student: string; from: string; to: string };
 type AssistHit = { name: string; subject: string; ranges: AssistRange[]; expected?: AssistExpected[] };
+type AssistDay = { date: string; weekday: string; closed?: string; hits?: AssistHit[]; unmarked?: string[] };
 type AssistAnswer = {
   ok?: boolean;
   reason?: string;
@@ -20,6 +21,7 @@ type AssistAnswer = {
   closed?: string;
   hits?: AssistHit[];
   unmarked?: string[];
+  days?: AssistDay[];   // 기간·여러 요일을 물었을 때 날짜별 결과 (첫 날은 위 date/hits 와 같다)
   error?: string;
 };
 type Message = { role: "user" | "assistant"; text?: string; answer?: AssistAnswer };
@@ -120,20 +122,26 @@ export function CrmAssistPanel({ branch }: { branch: string }) {
                 </p>
               );
             }
+            // 여러 날을 물었으면 날짜마다 따로 보여준다 (예전에는 첫 날만 보여서 "화목금"을 물어도 화요일만 나왔다)
+            const dayList: AssistDay[] = (answer.days && answer.days.length > 0)
+              ? answer.days
+              : [{ date: answer.date || "", weekday: answer.weekday || "", closed: answer.closed, hits: answer.hits, unmarked: answer.unmarked }];
             return (
-              <div key={index} className="rounded-xl border border-[#e4ded4] bg-white p-3">
+              <div key={index} className="space-y-2">
+                {dayList.map((day) => (
+              <div key={day.date} className="rounded-xl border border-[#e4ded4] bg-white p-3">
                 <p className="text-sm font-black text-[#4a453d]">
-                  {(answer.date || "").slice(5).replace("-", "/")}({answer.weekday})
+                  {(day.date || "").slice(5).replace("-", "/")}({day.weekday})
                   {answer.subject ? ` · ${answer.subject}` : ""}
                   {answer.fromTime ? ` · ${answer.fromTime}~${answer.toTime || "마감"}` : " · 종일"}
                 </p>
-                {answer.closed ? (
-                  <p className="mt-1.5 text-sm font-bold text-red-700">이 날은 {answer.closed}입니다.</p>
-                ) : (answer.hits || []).length === 0 ? (
+                {day.closed ? (
+                  <p className="mt-1.5 text-sm font-bold text-red-700">이 날은 {day.closed}입니다.</p>
+                ) : (day.hits || []).length === 0 ? (
                   <p className="mt-1.5 text-sm text-[#6b6459]">가능한 강사가 없습니다.</p>
                 ) : (
                   <div className="mt-2 space-y-2">
-                    {(answer.hits || []).map((hit) => (
+                    {(day.hits || []).map((hit) => (
                       <div key={hit.name} className="rounded-lg bg-[#faf9f6] p-2">
                         <p className="text-sm font-black text-[#4a453d]">
                           {hit.name} <span className="text-xs font-bold text-[#9a9389]">{hit.subject}</span>
@@ -155,11 +163,13 @@ export function CrmAssistPanel({ branch }: { branch: string }) {
                     ))}
                   </div>
                 )}
-                {(answer.unmarked || []).length > 0 ? (
+                {(day.unmarked || []).length > 0 ? (
                   <p className="mt-2 text-[11px] leading-5 text-[#9a9389]">
-                    {(answer.unmarked || []).join(", ")} 강사는 안 되는 시간을 아직 표시하지 않아, 잡힌 수업만 빠진 결과입니다.
+                    {(day.unmarked || []).join(", ")} 강사는 안 되는 시간을 아직 표시하지 않아, 잡힌 수업만 빠진 결과입니다.
                   </p>
                 ) : null}
+              </div>
+                ))}
               </div>
             );
           })
