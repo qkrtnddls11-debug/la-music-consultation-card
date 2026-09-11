@@ -16,12 +16,16 @@ type AssistAnswer = {
   date?: string;
   weekday?: string;
   subject?: string;
+  teacher?: string;
   fromTime?: string;
   toTime?: string;
   closed?: string;
   hits?: AssistHit[];
   unmarked?: string[];
   days?: AssistDay[];   // 기간·여러 요일을 물었을 때 날짜별 결과 (첫 날은 위 date/hits 와 같다)
+  scan?: boolean;       // "언제 되는 날이야" 훑기: days 에는 되는 날만 들어 있다
+  scanFrom?: string;
+  scanTo?: string;
   error?: string;
 };
 type Message = { role: "user" | "assistant"; text?: string; answer?: AssistAnswer };
@@ -125,9 +129,16 @@ export function CrmAssistPanel({ branch }: { branch: string }) {
             // 여러 날을 물었으면 날짜마다 따로 보여준다 (예전에는 첫 날만 보여서 "화목금"을 물어도 화요일만 나왔다)
             const dayList: AssistDay[] = (answer.days && answer.days.length > 0)
               ? answer.days
-              : [{ date: answer.date || "", weekday: answer.weekday || "", closed: answer.closed, hits: answer.hits, unmarked: answer.unmarked }];
+              : answer.scan ? [] : [{ date: answer.date || "", weekday: answer.weekday || "", closed: answer.closed, hits: answer.hits, unmarked: answer.unmarked }];
             return (
               <div key={index} className="space-y-2">
+                {answer.scan ? (
+                  <p className="rounded-xl border border-[#e4ded4] bg-[#faf9f6] px-3 py-2 text-xs font-bold text-[#6b6459]">
+                    {(answer.scanFrom || "").slice(5).replace("-", "/")}~{(answer.scanTo || "").slice(5).replace("-", "/")} 사이에서 되는 날만 골랐습니다
+                    {answer.teacher ? ` · ${answer.teacher} 강사` : ""}{answer.fromTime ? ` · ${answer.fromTime}~${answer.toTime || "마감"}` : ""}
+                    {dayList.length === 0 ? " — 이 기간에는 되는 날이 없습니다." : ""}
+                  </p>
+                ) : null}
                 {dayList.map((day) => (
               <div key={day.date} className="rounded-xl border border-[#e4ded4] bg-white p-3">
                 <p className="text-sm font-black text-[#4a453d]">
